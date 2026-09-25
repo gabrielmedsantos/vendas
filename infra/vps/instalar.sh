@@ -23,6 +23,7 @@ done
 [ -n "$DOMINIO" ] || { echo "Uso: bash infra/vps/instalar.sh --dominio seu.dominio.com.br [--demo]"; exit 1; }
 PORTA_APP="${WEB_PORT:-3380}"
 C="docker compose --env-file .env.production"
+[ -f compose.traefik.yaml ] && C="$C -f compose.yaml -f compose.traefik.yaml"
 ok()   { printf '  \033[32mOK\033[0m   %s\n' "$*"; }
 av()   { printf '  \033[33mAVISO\033[0m %s\n' "$*"; }
 erro() { printf '\n\033[31mERRO:\033[0m %s\n' "$*"; exit 1; }
@@ -35,7 +36,7 @@ echo "== 1. Inventário do servidor (somente leitura) =="
 . /etc/os-release 2>/dev/null || true
 echo "  Sistema: ${PRETTY_NAME:-desconhecido} · arquitetura $(uname -m)"
 MEM_MB=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
-DISCO_GB=$(df -BG --output=avail . | tail -1 | tr -dc 0-9)
+DISCO_GB=$(df -BG --output=avail . | tail -1 | tr -dc 0-9 || true)
 echo "  Memória: ${MEM_MB} MB · disco livre aqui: ${DISCO_GB} GB · CPUs: $(nproc)"
 [ "$MEM_MB" -lt 1800 ] && av "Pouca memória para compilar (< 2 GB). Se o build falhar, crie swap de 2 GB ou compile em outra máquina."
 [ "$DISCO_GB" -lt 8 ] && av "Pouco disco livre (< 8 GB)."
@@ -51,8 +52,8 @@ if command -v docker >/dev/null; then docker ps --format '    - container {{.Nam
 P80=0; P443=0; escutando 80 && P80=1; escutando 443 && P443=1
 echo "  Porta 80: $([ $P80 = 1 ] && echo ocupada || echo livre) · porta 443: $([ $P443 = 1 ] && echo ocupada || echo livre) · porta interna ${PORTA_APP}: $(escutando "$PORTA_APP" && echo OCUPADA || echo livre)"
 escutando "$PORTA_APP" && [ ! -f .env.production ] && erro "Porta ${PORTA_APP} já usada por outro programa. Rode com WEB_PORT=3480 bash infra/vps/instalar.sh ..."
-IP_DNS=$(getent ahostsv4 "$DOMINIO" | awk 'NR==1{print $1}')
-IP_AQUI=$(curl -4 -fsS -m 5 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
+IP_DNS=$(getent ahostsv4 "$DOMINIO" | awk 'NR==1{print $1}' || true)
+IP_AQUI=$(curl -4 -fsS -m 5 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}' || true)
 if [ -n "$IP_DNS" ] && [ "$IP_DNS" = "$IP_AQUI" ]; then ok "DNS: $DOMINIO → $IP_DNS (este servidor)"; else av "DNS: $DOMINIO → ${IP_DNS:-sem resposta}; IP deste servidor: ${IP_AQUI:-?}. O HTTPS só funciona quando apontar para cá."; fi
 if command -v ufw >/dev/null && $SUDO ufw status 2>/dev/null | grep -q "Status: active"; then
   $SUDO ufw status | grep -qE '^(80|443|80,443)[/ ].*ALLOW' && ok "Firewall (ufw) libera 80/443" || av "ufw ativo: confirme que 80 e 443 estão liberados (sudo ufw allow 80,443/tcp)."
@@ -64,14 +65,16 @@ if [ "${DOCKER_FALTA:-0}" = 1 ]; then
   pergunta "Instalar agora pelo script oficial do Docker (get.docker.com)?" || erro "Instale o Docker e rode de novo."
   curl -fsSL https://get.docker.com | $SUDO sh
   [ -n "$SUDO" ] && $SUDO usermod -aG docker "$USER" && av "Seu usuário entrou no grupo docker; se o próximo passo falhar por permissão, saia e entre de novo no SSH."
-  C="$SUDO docker compose --env-file .env.production"
+  C="$SUDO $C"
 fi
-docker info >/dev/null 2>&1 || C="$SUDO docker compose --env-file .env.production"
+docker info >/dev/null 2>&1 || C="$SUDO $C"
 
 echo; echo "== 2. Plano =="
 PROJ="${COMPOSE_PROJECT_NAME:-gct}"
 NOSSO_CADDY=0; docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "${PROJ}-caddy-1" && NOSSO_CADDY=1
 if [ $NOSSO_CADDY = 1 ] || { [ $P80 = 0 ] && [ $P443 = 0 ]; }; then MODO=caddy; echo "  HTTPS pelo Caddy do projeto (certificado automático para $DOMINIO)."
+elif TRAEFIK=$(docker ps --format '{{.Names}} {{.Image}}' 2>/dev/null | awk 'tolower($2) ~ /traefik/ {print $1; exit}') && [ -n "$TRAEFIK" ]; then
+  MODO=traefik; echo "  As portas 80/443 são do Traefik ($TRAEFIK): o sistema será publicado por ele, com rótulos só no container novo (o Traefik e os outros sites não são alterados)."
 else MODO=externo; echo "  Já existe algo nas portas 80/443: o app fica em 127.0.0.1:${PORTA_APP} e você liga o proxy existente (nada será alterado nele)."; fi
 echo "  Banco PostgreSQL próprio, sem porta pública. Dados em volumes Docker (${PROJ}_db-data, ${PROJ}_app-storage)."
 pergunta "Continuar com a instalação?" || { echo "Cancelado. Nada foi alterado."; exit 0; }
@@ -103,7 +106,15 @@ if [ "$DEMO" = 1 ]; then
     echo "  Empresas demo: demo-celulares@example.test / demo-brecho@example.test · senha: demo-$SENHA_DEMO"
 fi
 
-if [ "$MODO" = externo ]; then
+if [ "$MODO" = traefik ]; then
+  echo; echo "== 5. Publicar pelo Traefik =="
+  if [ -f compose.traefik.yaml ]; then ok "compose.traefik.yaml já existe (mantido)."
+    curl -fsS -m 15 "https://${DOMINIO}/healthz" >/dev/null 2>&1 && ok "https://${DOMINIO} no ar." || av "https://${DOMINIO} ainda não respondeu; veja os logs do Traefik."
+  else
+    SIMFLAG=""; [ "$SIM" = 1 ] && SIMFLAG="--sim"
+    COMPOSE_PROJECT_NAME="$PROJ" bash infra/vps/traefik.sh --dominio "$DOMINIO" $SIMFLAG || av "Publicação pelo Traefik não confirmada; veja a mensagem acima."
+  fi
+elif [ "$MODO" = externo ]; then
   mkdir -p infra/vps/gerado
   cat > infra/vps/gerado/nginx-${DOMINIO}.conf <<NGX
 server {

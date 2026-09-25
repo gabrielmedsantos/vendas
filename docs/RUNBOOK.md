@@ -46,6 +46,12 @@ com segredos criados no próprio servidor (0600); usa o Caddy do projeto **apena
 compila, sobe, verifica e oferece agendar backup diário. Rodar de novo atualiza mantendo senhas e dados.
 `--demo` cria as empresas fictícias (senha aleatória exibida no fim).
 
+**VPS com Traefik já em uso** (caso da VPS do piloto, onde o Traefik do n8n atende vários sites): o instalador
+detecta o Traefik e roda `infra/vps/traefik.sh`, que copia o padrão de um site que já funciona (entrypoint,
+certresolver e rede) e gera `compose.traefik.yaml` com rótulos **só no container web deste sistema**; o Traefik
+e os outros sites não são alterados. Testado com Traefik v3.6 simulando esse cenário: HTTPS 200, redirecionamento
+HTTP→HTTPS, login com cookie `Secure` e o outro site intacto.
+
 Testado em contêiner (2026-09-25): instalação nova com Caddy (HTTPS e login com cookie `Secure`), segunda
 execução preservando dados, e servidor com a porta 80 já ocupada (modo proxy externo). Não testado ainda na VPS real.
 

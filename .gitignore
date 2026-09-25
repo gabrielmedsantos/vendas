@@ -13,3 +13,7 @@ coverage/
 /tests/e2e/.auth/
 /tests/screenshots/output/
 *.log
+
+# Gerados na VPS
+compose.traefik.yaml
+infra/vps/gerado/
