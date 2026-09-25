@@ -62,3 +62,18 @@ Formato: decisão · motivo · reversível? · como reverter. Datas em 25/09/202
 
 ## ADR-015 — Estoque
 - FIFO por lote para quantidade; custo específico por unidade (lote de 1) para serializado. Entrada de troca vai para inspeção por padrão. Devolução volta ao custo histórico em inspeção. Perda gera despesa `inventory_loss` na competência.
+
+## ADR-016 — Catálogo público por papel próprio
+Rotas públicas (`/c/[slug]`, `/api/public/catalog/*`) usam o papel `gct_public`, com GRANT por coluna (sem custo, IMEI, fornecedor) e policy restritiva que só expõe itens de catálogo publicado. O DTO é montado por allowlist explícita. Pedido público entra como pendente, com preço congelado, e **não** reserva estoque até o operador confirmar. Reversível: basta despublicar.
+
+## ADR-017 — Imagens
+Upload validado por conteúdo (sharp), convertido para WebP, metadados (EXIF/GPS) removidos, até 5 MB e 10 por produto, em armazenamento local privado (volume). Servidas só por rota autenticada ou, se o produto estiver em catálogo publicado, pela rota pública. Troca para S3 compatível fica atrás da interface `Storage`.
+
+## ADR-018 — Administração da plataforma e cobrança
+Acesso à `/plataforma` exige registro em `platform_admins` (concedido por CLI com papel dono) **e** 2FA ativo. Toda ação exige motivo e grava `platform_audit`; o painel não lê dados operacionais das empresas. Planos são versionados (nova versão não altera assinaturas existentes). Cobrança do piloto é manual (fatura + registro de pagamento); webhook genérico com HMAC sobre o corpo bruto, janela de 5 min, ambiente esperado e idempotência por id do provedor fica pronto e desligado até existir segredo. Evento "pago" de um período prevalece sobre "falhou" que chegue depois.
+
+## ADR-019 — Empacotamento e implantação
+Uma `Dockerfile` com alvos `web` (Next standalone) e `worker` (bundle esbuild; `@gct/*` embutidos, dependências externas declaradas no pacote do worker). O mesmo alvo `worker` executa migrações como job único antes de web/worker. Banco sem porta publicada; web publicada só em loopback para o proxy existente; Caddy opcional por perfil. Imagens base fixadas por digest. Nada é implantado sem inventário da VPS (docs/RUNBOOK.md).
+
+## ADR-020 — Ordem das alocações de custo
+UUID aleatório não serve para ordenar. `sale_cost_allocations.seq` (identity) define a ordem; devolução reverte da última alocação para a primeira. Encontrado por teste intermitente (T-014).
