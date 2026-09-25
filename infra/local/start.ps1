@@ -3,8 +3,16 @@
 # Para parar sem apagar dados:  docker compose --env-file .env.production stop
 $ErrorActionPreference = 'Stop'
 Set-Location (Join-Path $PSScriptRoot '..\..')
-$port = if ($env:PORT) { $env:PORT } else { '3000' }
+$port = if ($env:PORT) { $env:PORT } else { '3380' }
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { throw 'Instale o Docker Desktop primeiro.' }
+
+# Porta ocupada por outro programa (ex.: outro sistema em localhost:3000)? Escolha outra com $env:PORT.
+if (Test-Path .env.production) { docker compose --env-file .env.production stop web *> $null }
+$busy = Get-NetTCPConnection -State Listen -LocalPort ([int]$port) -ErrorAction SilentlyContinue
+if ($busy) {
+  $who = ($busy | ForEach-Object { (Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).ProcessName } | Select-Object -Unique) -join ', '
+  throw "A porta $port já está em uso ($who). Rode de novo com outra, por exemplo:  `$env:PORT='3480'; powershell -ExecutionPolicy Bypass -File infra\local\start.ps1"
+}
 
 if (-not (Test-Path .env.production)) {
   $proj = if ($env:COMPOSE_PROJECT_NAME) { $env:COMPOSE_PROJECT_NAME } else { 'gct' }
@@ -21,7 +29,13 @@ if (-not (Test-Path .env.production)) {
   Write-Host 'Criado .env.production (senhas aleatórias locais).'
 }
 
-docker compose --env-file .env.production build
+# Endereço/porta não são segredo: mantém .env.production alinhado com a porta escolhida.
+$envLines = Get-Content .env.production | ForEach-Object {
+  if ($_ -match '^APP_URL=') { "APP_URL=http://localhost:$port" } elseif ($_ -match '^WEB_PORT=') { "WEB_PORT=$port" } else { $_ }
+}
+[IO.File]::WriteAllLines((Join-Path (Get-Location) '.env.production'), $envLines)
+
+if ($env:SKIP_BUILD -ne '1') { docker compose --env-file .env.production build }
 if ($LASTEXITCODE) { throw 'Falha no build.' }
 docker compose --env-file .env.production up -d --wait
 if ($LASTEXITCODE) { throw 'Falha ao subir os serviços.' }

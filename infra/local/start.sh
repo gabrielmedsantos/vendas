@@ -5,8 +5,18 @@
 # Para parar sem apagar dados:  docker compose --env-file .env.production stop
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-PORT="${PORT:-3000}"
+PORT="${PORT:-3380}"
 command -v docker >/dev/null || { echo "Instale o Docker Desktop (ou Docker Engine) primeiro."; exit 1; }
+
+# Porta ocupada por outro programa (ex.: outro sistema em localhost:3000)? Escolha outra com PORT=.
+port_busy() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null || (exec 3<>"/dev/tcp/::1/$1") 2>/dev/null; }
+running_here() { docker compose --env-file .env.production ps --status running -q web 2>/dev/null | grep -q .; }
+if [ -f .env.production ] && running_here; then docker compose --env-file .env.production stop web >/dev/null; fi
+if port_busy "$PORT"; then
+  echo "A porta $PORT já está em uso por outro programa neste computador."
+  echo "Rode de novo escolhendo outra, por exemplo:  PORT=3480 bash infra/local/start.sh"
+  exit 1
+fi
 
 if [ ! -f .env.production ]; then
   if docker volume inspect "${COMPOSE_PROJECT_NAME:-gct}_db-data" >/dev/null 2>&1; then
@@ -22,6 +32,9 @@ if [ ! -f .env.production ]; then
       done > .env.production
   echo "Criado .env.production (senhas aleatórias locais)."
 fi
+
+# Endereço/porta não são segredo: mantém .env.production alinhado com a porta escolhida.
+sed -i.bak -e "s#^APP_URL=.*#APP_URL=http://localhost:${PORT}#" -e "s/^WEB_PORT=.*/WEB_PORT=${PORT}/" .env.production && rm -f .env.production.bak
 
 [ "${SKIP_BUILD:-}" = 1 ] || docker compose --env-file .env.production build
 docker compose --env-file .env.production up -d --wait

@@ -28,7 +28,7 @@ SaaS multiempresa para lojas que **compram, vendem e trocam** (celulares, eletr�
 bash infra/local/start.sh                                              # Linux, macOS ou WSL
 powershell -ExecutionPolicy Bypass -File infra\local\start.ps1       # Windows (Docker Desktop)
 ```
-Abre em http://localhost:3000 com duas empresas de demonstração (`demo-celulares@example.test` e `demo-brecho@example.test`, senha `demo-senha-local`). Parar sem apagar dados: `docker compose --env-file .env.production stop`.
+Abre em http://localhost:3380 com duas empresas de demonstração (`demo-celulares@example.test` e `demo-brecho@example.test`, senha `demo-senha-local`). Parar sem apagar dados: `docker compose --env-file .env.production stop`.
 
 ## Rodar localmente para desenvolvimento
 Requisitos: Node 22.12+, pnpm 10, PostgreSQL 16+ com um superusuário local.
