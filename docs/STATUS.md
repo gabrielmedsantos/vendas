@@ -34,6 +34,20 @@ Fases 0–8 implementadas e testadas localmente. **Nada foi implantado na VPS** 
 - BrikLucro: só a página pública (BR-01) foi vista; área interna não.
 - Preços dos planos são provisórios (R$ 0 no piloto).
 
+## Produção (piloto) — instalado em 25/09/2026
+- URL: https://lucromax.alfamaxdigital.com.br · VPS 76.13.166.123 · código em `/srv/gct` (clone do branch `claude/new-session-z10cuu`).
+- A VPS é compartilhada com outros sistemas (n8n, Água Clara, alfamax, gerador de sites `bm-site-gen` etc.).
+  As portas 80/443 são do Traefik `n8n-traefik-1`; este sistema é publicado por ele via `compose.traefik.yaml`
+  (gerado por `infra/vps/traefik.sh`, com `priority=10000` para vencer a regra pega-tudo `*.alfamaxdigital.com.br`).
+- Segredos só em `/srv/gct/.env.production` (0600). Nunca commitar.
+- Comandos na VPS (em `/srv/gct`): `docker compose --env-file .env.production -f compose.yaml -f compose.traefik.yaml ps|logs|up -d`.
+  Nunca `down -v`, nunca mexer no Traefik nem nos containers de outros sistemas.
+- Atualizar: trazer o código novo (git pull) e rodar `bash infra/vps/instalar.sh --dominio lucromax.alfamaxdigital.com.br`
+  (mantém senhas, dados e a publicação no Traefik).
+- Pendente na VPS: confirmar agendamento do backup diário (a sessão caiu nessa pergunta) e cópia externa dos backups.
+- A cópia em `/srv/gct` está no commit d4fa06a + `infra/vps/traefik.sh` novo copiado à mão; o próximo `git pull` alinha.
+- Modelos de contrato (Word/PDF) em `docs/modelos/`: compra ou troca (do usuário), venda e termo de garantia de 3 meses.
+
 ## Testar localmente com Docker
 `bash infra/local/start.sh` (ou `infra\local\start.ps1` no Windows): gera `.env.production` local, sobe banco/migração/web/worker e cria as empresas demo (senha `demo-senha-local`). Verificado em clone limpo nesta sessão: login demo e painel sem erros de console.
 

@@ -396,9 +396,10 @@ export interface Invites {
   accepted_by: string | null;
   created_at: Generated<Timestamp>;
   created_by: string;
-  email: string;
+  email: string | null;
   expires_at: Timestamp;
   id: Generated<string>;
+  label: string | null;
   revoked_at: Timestamp | null;
   role: string;
   tenant_id: string;

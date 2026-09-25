@@ -2,8 +2,8 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Copy, UserPlus } from 'lucide-react';
-import { Badge, Button, Card, ErrorState, Field, FormError, Input, LoadingBlock, Modal, NoPermission, PageHeader, Select, Table, Td, Th } from '@/components/ui';
+import { Copy, Link2, Mail, MessageCircle, UserPlus } from 'lucide-react';
+import { Badge, Button, Card, ErrorState, Field, FormError, Input, LoadingBlock, Modal, NoPermission, PageHeader, Select, Table, Tabs, Td, Th } from '@/components/ui';
 import { useToast } from '@/components/toast';
 import { api } from '@/lib/client/api';
 import { dateBR, dateTimeBR, pct } from '@/lib/client/format';
@@ -12,7 +12,7 @@ import { PERMISSION_LABELS, ROLE_PERMISSIONS, type Permission, type Role } from 
 
 interface Members {
   members: { membershipId: string; userId: string; role: Role; grants: string[]; revokes: string[]; name: string; email: string; discountLimitBps: number; createdAt: string }[];
-  invites: { id: string; email: string; role: string; expiresAt: string }[];
+  invites: { id: string; email: string | null; label: string | null; role: string; expiresAt: string }[];
   roles: { id: Role; label: string }[];
   permissions: Permission[];
 }
@@ -25,7 +25,7 @@ export default function TeamPage() {
   const q = useQuery({ queryKey: ['members'], queryFn: () => api<Members>('members'), enabled: can('members.manage') });
   const audit = useQuery({ queryKey: ['audit'], queryFn: () => api<{ data: { id: string; action: string; entity: string; entityId: string | null; createdAt: string; userName: string | null }[] }>('audit?limit=30'), enabled: can('members.manage') });
   const [inviting, setInviting] = useState(false);
-  const [inv, setInv] = useState({ email: '', role: 'seller' });
+  const [inv, setInv] = useState({ mode: 'link' as 'link' | 'email', email: '', label: '', role: 'seller' });
   const [link, setLink] = useState<string | null>(null);
   const [editing, setEditing] = useState<Members['members'][number] | null>(null);
   const [perm, setPerm] = useState<{ role: Role; grants: string[]; revokes: string[]; discount: string }>({ role: 'seller', grants: [], revokes: [], discount: '10' });
@@ -38,7 +38,7 @@ export default function TeamPage() {
   const effective = (role: Role, grants: string[], revokes: string[]) => new Set([...ROLE_PERMISSIONS[role], ...grants].filter((p) => !revokes.includes(p) || role === 'owner'));
   return (
     <div>
-      <PageHeader title="Equipe e permissões" description="Ocultar botões não basta: cada permissão é verificada no servidor." actions={<Button onClick={() => { setInv({ email: '', role: 'seller' }); setLink(null); setError(null); setInviting(true); }}><UserPlus className="size-4" />Convidar</Button>} />
+      <PageHeader title="Equipe e permissões" description="Ocultar botões não basta: cada permissão é verificada no servidor." actions={<Button onClick={() => { setInv({ mode: 'link', email: '', label: '', role: 'seller' }); setLink(null); setError(null); setInviting(true); }}><UserPlus className="size-4" />Convidar</Button>} />
       <Card title="Membros">
         <Table>
           <thead><tr><Th>Nome</Th><Th>Papel</Th><Th right>Limite de desconto</Th><Th>Ajustes</Th><Th /></tr></thead>
@@ -55,7 +55,7 @@ export default function TeamPage() {
       </Card>
       {d.invites.length > 0 && (
         <Card className="mt-4" title="Convites pendentes">
-          <ul className="flex flex-col gap-2 text-sm">{d.invites.map((i) => <li key={i.id} className="flex items-center justify-between"><span>{i.email} · {roleLabel(i.role)} · expira {dateBR(i.expiresAt)}</span><Button size="sm" variant="quiet" onClick={async () => { await api(`members/invites/${i.id}`, { method: 'DELETE' }); qc.invalidateQueries({ queryKey: ['members'] }); }}>Revogar</Button></li>)}</ul>
+          <ul className="flex flex-col gap-2 text-sm">{d.invites.map((i) => <li key={i.id} className="flex items-center justify-between"><span className="flex items-center gap-2">{i.email ? <Mail className="size-4 text-muted" /> : <Link2 className="size-4 text-muted" />}{i.email ?? i.label ?? 'Convite por link'} · {roleLabel(i.role)} · expira {dateBR(i.expiresAt)}</span><Button size="sm" variant="quiet" onClick={async () => { await api(`members/invites/${i.id}`, { method: 'DELETE' }); qc.invalidateQueries({ queryKey: ['members'] }); }}>Revogar</Button></li>)}</ul>
         </Card>
       )}
       <Card className="mt-4" title="Trilha de auditoria" description="Ações críticas registradas (somente leitura).">
@@ -63,18 +63,23 @@ export default function TeamPage() {
       </Card>
       <Modal open={inviting} onClose={() => setInviting(false)} title="Convidar membro" footer={link ? <Button onClick={() => setInviting(false)}>Concluir</Button> : <>
         <Button variant="secondary" onClick={() => setInviting(false)}>Cancelar</Button>
-        <Button onClick={async () => { setError(null); try { const r = await api<{ link: string; emailSent: boolean }>('members/invites', { body: inv }); setLink(r.link); qc.invalidateQueries({ queryKey: ['members'] }); if (r.emailSent) toast('Convite enviado por e-mail.'); } catch (e) { setError(e); } }}>Gerar convite</Button>
+        <Button onClick={async () => { setError(null); try { const r = await api<{ link: string; emailSent: boolean }>('members/invites', { body: inv.mode === 'link' ? { role: inv.role, label: inv.label || null } : { email: inv.email, role: inv.role, label: inv.label || null } }); setLink(r.link); qc.invalidateQueries({ queryKey: ['members'] }); if (r.emailSent) toast('Convite enviado por e-mail.'); } catch (e) { setError(e); } }}>Gerar convite</Button>
       </>}>
         {link ? (
           <div className="flex flex-col gap-2 text-sm">
-            <p>Envie este link para a pessoa. Ele expira em 7 dias e só pode ser usado uma vez, pelo e-mail convidado.</p>
-            <div className="flex gap-2"><Input readOnly value={link} aria-label="Link do convite" /><Button variant="secondary" onClick={() => { navigator.clipboard.writeText(link); toast('Link copiado.'); }} aria-label="Copiar link"><Copy className="size-4" /></Button></div>
+            <p>{inv.mode === 'link' ? 'Envie este link para a pessoa. Quem abrir primeiro entra na empresa com o papel escolhido. Vale uma vez e expira em 7 dias.' : 'Envie este link para a pessoa. Ele expira em 7 dias e só pode ser usado uma vez, pelo e-mail convidado.'}</p>
+            <div className="flex gap-2"><Input readOnly value={link} aria-label="Link do convite" /><Button variant="secondary" onClick={async () => { try { await navigator.clipboard.writeText(link); toast('Link copiado.'); } catch { toast('Não foi possível copiar; selecione o texto do link.'); } }} aria-label="Copiar link"><Copy className="size-4" /></Button></div>
+            <a className="inline-flex w-fit items-center gap-2 rounded-xl border border-line-strong px-3 py-2 text-sm hover:border-primary" href={`https://wa.me/?text=${encodeURIComponent(`Convite para entrar na equipe: ${link}`)}`} target="_blank" rel="noopener noreferrer"><MessageCircle className="size-4" />Enviar pelo WhatsApp</a>
+            <p className="text-xs text-muted">Se o link cair em mãos erradas, revogue em "Convites pendentes".</p>
             <p className="text-xs text-muted">O envio automático por e-mail fica ativo quando o SMTP estiver configurado.</p>
           </div>
         ) : (
           <div className="flex flex-col gap-3">
-            <Field label="E-mail" htmlFor="iv-e"><Input id="iv-e" type="email" value={inv.email} onChange={(e) => setInv({ ...inv, email: e.target.value })} /></Field>
-            <Field label="Papel" htmlFor="iv-r"><Select id="iv-r" value={inv.role} onChange={(e) => setInv({ ...inv, role: e.target.value })}>{d.roles.filter((r) => r.id !== 'owner' || me.data?.current?.role === 'owner').map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}</Select></Field>
+            <Tabs value={inv.mode} onChange={(v) => setInv({ ...inv, mode: v, role: v === 'link' && inv.role === 'owner' ? 'seller' : inv.role })} options={[{ value: 'link', label: 'Por link' }, { value: 'email', label: 'Por e-mail' }]} />
+            {inv.mode === 'link'
+              ? <Field label="Para quem é (opcional)" htmlFor="iv-l" help="Só para você identificar o convite na lista. Ex.: Vendedor João"><Input id="iv-l" maxLength={80} value={inv.label} onChange={(e) => setInv({ ...inv, label: e.target.value })} /></Field>
+              : <Field label="E-mail" htmlFor="iv-e" help="Só essa pessoa, entrando com esse e-mail, poderá usar o convite."><Input id="iv-e" type="email" value={inv.email} onChange={(e) => setInv({ ...inv, email: e.target.value })} /></Field>}
+            <Field label="Papel" htmlFor="iv-r" help={inv.mode === 'link' ? 'Proprietário só pode ser convidado por e-mail.' : undefined}><Select id="iv-r" value={inv.role} onChange={(e) => setInv({ ...inv, role: e.target.value })}>{d.roles.filter((r) => r.id !== 'owner' || (inv.mode === 'email' && me.data?.current?.role === 'owner')).map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}</Select></Field>
             <FormError error={error} />
           </div>
         )}

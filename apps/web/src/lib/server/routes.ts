@@ -103,7 +103,7 @@ export const routes: RouteDef[] = [
   {
     method: 'POST', path: 'members/invites', rate: { max: 20, windowMs: 3600_000 },
     handler: async ({ deps, actor, body }) => {
-      const input = p(z.object({ email: z.string().trim().email(), role: z.enum(A.ROLES_FOR_INVITE) }), await body());
+      const input = p(z.object({ email: z.union([z.string().trim().email(), z.literal('')]).optional().nullable(), role: z.enum(A.ROLES_FOR_INVITE), label: z.string().trim().max(80).optional().nullable() }), await body());
       return A.createInvite(deps, actor, input, process.env.APP_URL ?? 'http://localhost:3000');
     },
   },

@@ -29,7 +29,11 @@ export default function SignUpPage() {
           setLoading(false);
           if (r.error) return setError(authErrorMessage(r.error.code, r.error.message));
           if (!r.data?.token) return setInfo('Conta criada. Enviamos um link de confirmação para o seu e-mail.');
-          const ref = new URLSearchParams(window.location.search).get('indicacao')?.replace(/[^A-Za-z0-9]/g, '').slice(0, 12);
+          const params = new URLSearchParams(window.location.search);
+          // Volta para o convite quando a conta foi criada a partir dele (somente caminho interno /convite/...).
+          const volta = params.get('volta');
+          if (volta && /^\/convite\/[A-Za-z0-9_-]{20,100}$/.test(volta)) return router.replace(volta);
+          const ref = params.get('indicacao')?.replace(/[^A-Za-z0-9]/g, '').slice(0, 12);
           router.replace(ref ? `/app/empresas?indicacao=${ref}` : '/app/empresas');
         }}
       >

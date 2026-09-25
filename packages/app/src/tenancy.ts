@@ -182,7 +182,7 @@ export async function listMembers(deps: AppDeps, actor: Actor) {
     const members = await trx.selectFrom('member_directory').selectAll().where('status', '=', 'active').orderBy('name').execute();
     const invites = await trx
       .selectFrom('invites')
-      .select(['id', 'email', 'role', 'expires_at', 'created_at'])
+      .select(['id', 'email', 'label', 'role', 'expires_at', 'created_at'])
       .where('accepted_at', 'is', null)
       .where('revoked_at', 'is', null)
       .where('expires_at', '>', new Date())
@@ -201,14 +201,17 @@ export function hashToken(token: string): string {
 export async function createInvite(
   deps: AppDeps,
   actor: Actor,
-  input: { email: string; role: Role },
+  input: { email?: string | null; role: Role; label?: string | null },
   appUrl: string,
 ): Promise<{ inviteId: string; link: string; emailSent: boolean }> {
   requirePermission(actor, 'members.manage');
-  const email = input.email.trim().toLowerCase();
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw invalid('E-mail inválido.', { email: 'inválido' });
+  // Sem e-mail = convite por link: vale uma vez, para quem abrir primeiro, por 7 dias.
+  const email = input.email?.trim().toLowerCase() || null;
+  const label = input.label?.trim().slice(0, 80) || null;
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw invalid('E-mail inválido.', { email: 'inválido' });
   if (!ROLES.includes(input.role)) throw invalid('Papel inválido.', { role: 'inválido' });
   if (input.role === 'owner' && actor.role !== 'owner') throw new AppError('forbidden', 'Somente proprietários convidam proprietários.');
+  if (input.role === 'owner' && !email) throw invalid('Convite de proprietário precisa do e-mail da pessoa.', { email: 'obrigatório' });
   const token = randomBytes(32).toString('base64url');
   const inviteId = await withTenant(deps.dbs.app, actor, async (trx) => {
     await checkLimit(trx, actor.tenantId, 'users', 1);
@@ -217,6 +220,7 @@ export async function createInvite(
       .values({
         tenant_id: actor.tenantId,
         email,
+        label,
         role: input.role,
         token_hash: hashToken(token),
         expires_at: new Date(Date.now() + 7 * 86400000),
@@ -224,12 +228,12 @@ export async function createInvite(
       })
       .returning('id')
       .executeTakeFirstOrThrow();
-    await audit(trx, actor, 'member.invited', 'invite', row.id, { role: input.role });
+    await audit(trx, actor, 'member.invited', 'invite', row.id, { role: input.role, byLink: !email });
     return row.id;
   });
   const link = `${appUrl}/convite/${token}`;
   let emailSent = false;
-  if (deps.mailer.enabled) {
+  if (deps.mailer.enabled && email) {
     await deps.mailer.send({
       to: email,
       subject: 'Convite para Gestão Compra e Troca',
@@ -251,7 +255,7 @@ export async function acceptInvite(deps: AppDeps, user: { id: string; email: str
       .forUpdate()
       .executeTakeFirst();
     if (!inv || inv.accepted_at || inv.revoked_at || inv.expires_at < new Date()) throw invalid('Convite inválido ou expirado.');
-    if (inv.email.toLowerCase() !== user.email.toLowerCase())
+    if (inv.email && inv.email.toLowerCase() !== user.email.toLowerCase())
       throw new AppError('forbidden', 'Este convite foi enviado para outro e-mail.');
     await trx
       .insertInto('memberships')

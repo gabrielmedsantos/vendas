@@ -21,7 +21,11 @@ export function authErrorMessage(code?: string, fallback?: string): string {
       return 'Confirme seu e-mail antes de entrar. Enviamos um link para sua caixa de entrada.';
     case 'INVALID_TOKEN':
       return 'Link inválido ou expirado. Solicite um novo.';
+    case 'TOO_MANY_REQUESTS':
+      return 'Muitas tentativas seguidas. Aguarde um minuto e tente novamente.';
     default:
+      // O limite de tentativas do servidor de autenticação responde em inglês e sem código.
+      if (fallback && /too many requests/i.test(fallback)) return 'Muitas tentativas seguidas. Aguarde um minuto e tente novamente.';
       return fallback ?? 'Não foi possível concluir. Tente novamente.';
   }
 }

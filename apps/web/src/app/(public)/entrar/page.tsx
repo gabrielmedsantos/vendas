@@ -14,9 +14,10 @@ function SignIn() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const safeNext = next && next.startsWith('/app') ? next : '/app';
+  // Só caminhos internos conhecidos (evita redirecionamento aberto).
+  const safeNext = next && (/^\/app(\/|$)/.test(next) || /^\/convite\/[A-Za-z0-9_-]{20,100}$/.test(next)) ? next : '/app';
   return (
-    <AuthCard eyebrow="Entrar" title="Acesse sua conta" subtitle="Informe seus dados para abrir o painel." footer={<>Ainda não tem conta? <Link className="text-primary-soft hover:underline" href="/cadastro">Criar conta</Link></>}>
+    <AuthCard eyebrow="Entrar" title="Acesse sua conta" subtitle="Informe seus dados para abrir o painel." footer={<>Ainda não tem conta? <Link className="text-primary-soft hover:underline" href={safeNext.startsWith('/convite/') ? `/cadastro?volta=${encodeURIComponent(safeNext)}` : '/cadastro'}>Criar conta</Link></>}>
       <form
         className="flex flex-col gap-4"
         onSubmit={async (e) => {

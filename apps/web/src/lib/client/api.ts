@@ -40,7 +40,8 @@ export async function api<T = unknown>(path: string, opts: ApiOptions = {}): Pro
   const data = text ? JSON.parse(text) : null;
   if (!res.ok) {
     const e = data?.error ?? {};
-    if (res.status === 401 && typeof window !== 'undefined' && !window.location.pathname.startsWith('/entrar')) {
+    // Só as áreas logadas redirecionam para o login; páginas públicas (convite, cadastro, catálogo) tratam o 401 sozinhas.
+    if (res.status === 401 && typeof window !== 'undefined' && /^\/(app|plataforma)(\/|$)/.test(window.location.pathname)) {
       window.location.href = `/entrar?volta=${encodeURIComponent(window.location.pathname)}`;
     }
     throw new ApiError(res.status, e.code ?? 'error', e.message ?? 'Falha na requisição.', e.fields, e.request_id);

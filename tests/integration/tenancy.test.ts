@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import { sql, withTenant } from '@gct/db';
 import {
-  acceptInvite, createInvite, getProduct, listProducts, listTenantsForUser, resolveActor, updateMember, updateProduct,
+  acceptInvite, createInvite, revokeInvite, listMembers, getProduct, listProducts, listTenantsForUser, resolveActor, updateMember, updateProduct,
   zProduct, zProductList, listParties, zPartyList, createProduct,
 } from '@gct/app';
 import { AppError } from '@gct/shared';
@@ -159,5 +159,24 @@ describe('membros e permissões', () => {
     expect(actor.role).toBe('finance');
     expect(actor.permissions.has('finance.settle_receivable')).toBe(true);
     expect(actor.permissions.has('sales.create')).toBe(false);
+  });
+
+  it('convite por link: qualquer pessoa aceita uma vez; revogado e proprietário por link são recusados', async () => {
+    const inv = await createInvite(deps, A.owner, { role: 'seller', label: 'Vendedor por link' }, 'http://localhost:3000');
+    const token = inv.link.split('/convite/')[1]!;
+    const primeira = await createUser(deps, 'Quem abriu primeiro');
+    const segunda = await createUser(deps, 'Quem abriu depois');
+    expect((await acceptInvite(deps, primeira, token)).tenantId).toBe(A.tenantId);
+    expect((await resolveActor(deps, primeira.id, A.tenantId)).role).toBe('seller');
+    await expect(acceptInvite(deps, segunda, token)).rejects.toMatchObject({ code: 'validation_failed' });
+    await expect(resolveActor(deps, segunda.id, A.tenantId)).rejects.toBeInstanceOf(AppError);
+
+    const rev = await createInvite(deps, A.owner, { role: 'viewer' }, 'http://localhost:3000');
+    await revokeInvite(deps, A.owner, rev.inviteId);
+    await expect(acceptInvite(deps, segunda, rev.link.split('/convite/')[1]!)).rejects.toMatchObject({ code: 'validation_failed' });
+
+    await expect(createInvite(deps, A.owner, { role: 'owner' }, 'http://localhost:3000')).rejects.toMatchObject({ code: 'validation_failed' });
+    const lista = await listMembers(deps, A.owner);
+    expect(lista.invites.some((i) => i.label === 'Vendedor por link')).toBe(false); // aceito sai da lista
   });
 });
