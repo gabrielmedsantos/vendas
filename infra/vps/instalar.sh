@@ -108,6 +108,11 @@ fi
 
 if [ "$MODO" = traefik ]; then
   echo; echo "== 5. Publicar pelo Traefik =="
+  if [ -f compose.traefik.yaml ] && ! grep -q '\.priority:' compose.traefik.yaml; then
+    # Versão antiga sem prioridade: aplica a prioridade alta nas regras do sistema.
+    sed -i -E 's/^(\s*)traefik\.http\.routers\.([^.]+)\.rule: .*/&\n\1traefik.http.routers.\2.priority: "10000"/' compose.traefik.yaml
+    $C up -d --wait web && ok "Prioridade alta aplicada no Traefik (vence regras pega-tudo de outros sites)."
+  fi
   if [ -f compose.traefik.yaml ]; then ok "compose.traefik.yaml já existe (mantido)."
     curl -fsS -m 15 "https://${DOMINIO}/healthz" >/dev/null 2>&1 && ok "https://${DOMINIO} no ar." || av "https://${DOMINIO} ainda não respondeu; veja os logs do Traefik."
   else
