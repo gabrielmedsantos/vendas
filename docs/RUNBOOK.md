@@ -34,7 +34,22 @@ Decisões a partir do inventário:
 | Já existe PostgreSQL no host | Não mexer nele. O compose sobe um Postgres próprio sem porta publicada. |
 | < 2 GB RAM | Build fora da VPS (CI) e só `pull` na VPS; ou limitar `DB_POOL_MAX`. |
 
-## 2. Primeira instalação (quando autorizado)
+## 2. Instalação automatizada (recomendada)
+
+Na VPS, com o código na pasta `/srv/gct`:
+```bash
+bash infra/vps/instalar.sh --dominio seu.dominio.com.br
+```
+O script faz o inventário da seção 1 (só leitura), mostra o plano e pede confirmação; gera `.env.production`
+com segredos criados no próprio servidor (0600); usa o Caddy do projeto **apenas** se 80/443 estiverem livres
+(senão gera `infra/vps/gerado/nginx-<domínio>.conf` e mostra como ligar no proxy existente, sem alterá-lo);
+compila, sobe, verifica e oferece agendar backup diário. Rodar de novo atualiza mantendo senhas e dados.
+`--demo` cria as empresas fictícias (senha aleatória exibida no fim).
+
+Testado em contêiner (2026-09-25): instalação nova com Caddy (HTTPS e login com cookie `Secure`), segunda
+execução preservando dados, e servidor com a porta 80 já ocupada (modo proxy externo). Não testado ainda na VPS real.
+
+## 2b. Primeira instalação manual
 
 ```bash
 git clone <repo> /srv/gct && cd /srv/gct
