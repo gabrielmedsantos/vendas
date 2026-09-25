@@ -57,6 +57,9 @@ test('capturas por viewport', async ({ browser }) => {
     { path: '/app/trocas/nova', name: 'nova-troca' },
     { path: '/app/produtos', name: 'produtos' },
     { path: '/app/financeiro/receber', name: 'receber' },
+    { path: '/app/servicos', name: 'servicos' },
+    { path: '/app/garantias', name: 'garantias' },
+    { path: '/app/ajuda', name: 'ajuda' },
   ];
   for (const vp of VIEWPORTS) {
     const page = await ctx.newPage();

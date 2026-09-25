@@ -303,13 +303,13 @@ describe('documentos e fila', () => {
     await stockUp(deps, actor, supplier, [{ variantId: p.variantId, quantity: 1, unitCostCents: 100n }]);
     const r = await confirmSale(deps, actor, sale(p.variantId, 1, 500n, [{ kind: 'cash', amountCents: '500' }]), randomUUID());
     const broken = { ...deps, storage: { ...deps.storage, put: async () => { throw new Error('disco indisponível'); }, get: deps.storage.get.bind(deps.storage), delete: deps.storage.delete.bind(deps.storage), exists: deps.storage.exists.bind(deps.storage) } };
-    for (let i = 0; i < 5; i++) await processOutboxBatch(broken, 50);
+    for (let i = 0; i < 5; i++) await processOutboxBatch(broken, 50, actor.tenantId);
     const doc = await withTenant(deps.dbs.app, actor, (trx) => trx.selectFrom('documents').select(['id', 'status']).where('source_id', '=', r.saleId).executeTakeFirstOrThrow());
     expect(doc.status).toBe('failed');
     const s = await withTenant(deps.dbs.app, actor, (trx) => trx.selectFrom('sales').select('status').where('id', '=', r.saleId).executeTakeFirstOrThrow());
     expect(s.status).toBe('confirmed');
     await retryDocument(deps, actor, doc.id);
-    await processOutboxBatch(deps, 200);
+    await processOutboxBatch(deps, 200, actor.tenantId);
     const pdf = await readDocumentPdf(deps, actor, doc.id);
     expect(pdf.data.subarray(0, 5).toString()).toBe('%PDF-');
     const moves = await withTenant(deps.dbs.app, actor, (trx) => sql<{ n: number }>`select count(*)::int as n from stock_movements where source_id = ${r.saleId}`.execute(trx));

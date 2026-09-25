@@ -52,7 +52,7 @@ export const routes: RouteDef[] = [
   {
     method: 'POST', path: 'tenants', noTenant: true, rate: { max: 5, windowMs: 3600_000 },
     handler: async ({ deps, session, body }) => {
-      const input = p(z.object({ name: z.string().trim().min(2).max(120), timezone: z.string().max(64).optional(), document: z.string().max(20).optional() }), await body());
+      const input = p(z.object({ name: z.string().trim().min(2).max(120), timezone: z.string().max(64).optional(), document: z.string().max(20).optional(), referralCode: z.string().trim().max(12).optional() }), await body());
       const r = await A.provisionTenant(deps, session.user.id, input);
       await setTenantCookie(r.tenantId);
       return r;
@@ -386,6 +386,32 @@ export const routes: RouteDef[] = [
     },
   },
   { method: 'POST', path: 'documents/:id/retry', handler: ({ deps, actor, params }) => A.retryDocument(deps, actor, id(params)) },
+
+  // ---------------------------------------------------------------- pós-venda, ajuda e indicação
+  { method: 'GET', path: 'service-orders', handler: ({ deps, actor, query }) => A.listServiceOrders(deps, actor, p(A.zServiceOrderList, queryObject(query))) },
+  { method: 'POST', path: 'service-orders', handler: async ({ deps, actor, body }) => A.createServiceOrder(deps, actor, p(A.zServiceOrder, await body())) },
+  { method: 'GET', path: 'service-orders/:id', handler: ({ deps, actor, params }) => A.getServiceOrder(deps, actor, id(params)) },
+  { method: 'PUT', path: 'service-orders/:id', handler: async ({ deps, actor, params, body }) => A.updateServiceOrder(deps, actor, id(params), p(A.zServiceOrder, await body())) },
+  {
+    method: 'POST', path: 'service-orders/:id/status',
+    handler: async ({ deps, actor, params, body }) => {
+      const input = p(z.object({ status: z.enum(A.SERVICE_STATUS), note: z.string().trim().max(500).optional() }), await body());
+      return A.setServiceOrderStatus(deps, actor, id(params), input.status, input.note);
+    },
+  },
+  { method: 'GET', path: 'warranty-cases', handler: ({ deps, actor, query }) => A.listWarrantyCases(deps, actor, p(A.zWarrantyList, queryObject(query))) },
+  { method: 'POST', path: 'warranty-cases', handler: async ({ deps, actor, body }) => A.openWarrantyCase(deps, actor, p(A.zWarrantyCase, await body())) },
+  {
+    method: 'POST', path: 'warranty-cases/:id/status',
+    handler: async ({ deps, actor, params, body }) => {
+      const input = p(z.object({ status: z.enum(A.WARRANTY_STATUS), resolution: z.string().trim().max(2000).optional() }), await body());
+      return A.setWarrantyStatus(deps, actor, id(params), input.status, input.resolution);
+    },
+  },
+  { method: 'POST', path: 'warranty-cases/:id/document', handler: ({ deps, actor, params }) => A.requestWarrantyDocument(deps, actor, id(params)) },
+  { method: 'GET', path: 'help', handler: ({ deps, actor, query }) => A.listHelpArticles(deps, actor, p(A.zHelpQuery, queryObject(query))) },
+  { method: 'GET', path: 'help/:slug', handler: ({ deps, actor, params }) => A.getHelpArticle(deps, actor, p(z.object({ slug: z.string().regex(/^[a-z0-9-]{2,80}$/) }), params).slug) },
+  { method: 'GET', path: 'referrals', handler: ({ deps, actor }) => A.getReferralInfo(deps, actor) },
 
   // ---------------------------------------------------------------- administração da plataforma (control plane)
   { method: 'GET', path: 'platform/me', noTenant: true, handler: async ({ deps, session }) => A.resolvePlatformAdmin(deps, session.user) },

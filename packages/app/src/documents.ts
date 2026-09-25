@@ -209,7 +209,7 @@ export async function readDocumentPdf(deps: AppDeps, actor: Actor, id: string): 
   requirePermission(actor, 'sales.view');
   const doc = await tx(deps, actor, (trx) => trx.selectFrom('documents').select(['doc_type', 'number', 'status', 'storage_key']).where('id', '=', id).executeTakeFirst());
   if (!doc) throw notFound('Documento');
-  if (doc.status !== 'ready' || !doc.storage_key) throw conflict('Documento ainda não foi gerado. Tente novamente em instantes ou reprocese.');
+  if (doc.status !== 'ready' || !doc.storage_key) throw conflict('Documento ainda não foi gerado. Tente novamente em instantes ou reprocesse.');
   return { filename: `${doc.doc_type}-${doc.number}.pdf`, data: await deps.storage.get(doc.storage_key) };
 }
 

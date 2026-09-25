@@ -29,7 +29,8 @@ export default function SignUpPage() {
           setLoading(false);
           if (r.error) return setError(authErrorMessage(r.error.code, r.error.message));
           if (!r.data?.token) return setInfo('Conta criada. Enviamos um link de confirmação para o seu e-mail.');
-          router.replace('/app/empresas');
+          const ref = new URLSearchParams(window.location.search).get('indicacao')?.replace(/[^A-Za-z0-9]/g, '').slice(0, 12);
+          router.replace(ref ? `/app/empresas?indicacao=${ref}` : '/app/empresas');
         }}
       >
         <Field label="Nome completo" htmlFor="name"><Input id="name" autoComplete="name" required value={form.name} onChange={set('name')} /></Field>

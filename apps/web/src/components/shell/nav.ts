@@ -1,6 +1,6 @@
 import {
-  ArrowLeftRight, BarChart3, Boxes, Building2, ClipboardList, CreditCard, FileText, HandCoins, Home, Landmark, Package, Receipt, Settings,
-  ShoppingBag, ShoppingCart, Store, Tags, Users, Wallet, type LucideIcon,
+  ArrowLeftRight, BarChart3, Boxes, Building2, ClipboardList, CreditCard, FileText, HandCoins, Home, Landmark, LifeBuoy, Package, Receipt, Settings,
+  ShieldCheck, ShoppingBag, ShoppingCart, Store, Tags, Users, Wallet, Wrench, type LucideIcon,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -18,6 +18,8 @@ export const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { href: '/app/vendas', label: 'Vendas', icon: ShoppingCart, perm: 'sales.view' },
       { href: '/app/trocas', label: 'Trocas', icon: ArrowLeftRight, perm: 'sales.view' },
+      { href: '/app/servicos', label: 'Serviços', icon: Wrench, perm: 'sales.view' },
+      { href: '/app/garantias', label: 'Garantias', icon: ShieldCheck, perm: 'sales.view' },
       { href: '/app/compras', label: 'Compras', icon: ShoppingBag, anyPerm: ['purchases.manage', 'purchases.receive'] },
       { href: '/app/produtos', label: 'Produtos', icon: Package, perm: 'products.view' },
       { href: '/app/categorias', label: 'Categorias', icon: Tags, perm: 'products.view' },
@@ -50,6 +52,7 @@ export const NAV: { group: string; items: NavItem[] }[] = [
       { href: '/app/configuracoes/pagamentos', label: 'Canais e pagamentos', icon: Wallet, perm: 'settings.manage' },
       { href: '/app/configuracoes/documentos', label: 'Documentos', icon: FileText, perm: 'sales.view' },
       { href: '/app/configuracoes/plano', label: 'Plano', icon: ClipboardList },
+      { href: '/app/ajuda', label: 'Ajuda', icon: LifeBuoy },
     ],
   },
 ];

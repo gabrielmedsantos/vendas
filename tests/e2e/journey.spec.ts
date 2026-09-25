@@ -148,4 +148,29 @@ test.describe.serial('jornada completa', () => {
     await expect(page.getByRole('cell', { name: '= Receita líquida' })).toBeVisible();
     await expect(page.getByRole('cell', { name: '= Resultado bruto' })).toBeVisible();
   });
+
+  test('ordem de serviço: criar, andar e entregar', async () => {
+    await page.goto('/app/servicos');
+    await page.getByRole('button', { name: 'Nova ordem' }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('textbox', { name: 'Serviço' }).fill('Troca de bateria E2E');
+    await money(page, 'Valor combinado', '120');
+    await dialog.getByRole('button', { name: 'Salvar' }).click();
+    await expect(dialog).toBeHidden();
+    await page.getByRole('cell', { name: 'Troca de bateria E2E' }).click();
+    const detail = page.getByRole('dialog');
+    await detail.getByRole('button', { name: 'Iniciar' }).click();
+    await detail.getByRole('button', { name: 'Marcar pronta' }).click();
+    await detail.getByRole('button', { name: 'Entregar ao cliente' }).click();
+    await expect(detail.getByText('Entregue', { exact: true })).toBeVisible();
+    await expect(detail.getByText(/Pronta → Entregue/)).toBeVisible();
+  });
+
+  test('central de ajuda', async () => {
+    await page.goto('/app/ajuda');
+    await page.getByRole('textbox', { name: 'Buscar na ajuda' }).fill('compensação');
+    await page.getByRole('link', { name: /Entendendo a troca/ }).click();
+    await expect(page.getByRole('heading', { name: 'Entendendo a troca com diferença' })).toBeVisible();
+    await expect(page.getByText(/cliente paga R\$ 500/)).toBeVisible();
+  });
 });

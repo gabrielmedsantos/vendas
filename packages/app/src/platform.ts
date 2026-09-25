@@ -261,6 +261,8 @@ export async function applyBillingEvent(deps: AppDeps, ev: BillingEvent, key: st
       await db.updateTable('subscriptions').set({ current_period_start: new Date(`${ev.periodStart}T00:00:00Z`), current_period_end: end, trial_ends_at: null }).where('id', '=', sub.id).execute();
     }
     if (sub.status !== 'active') await transitionSubscription(db, ev.tenantId, 'active', 'Pagamento confirmado', 'billing', `${key}:active`);
+    // Indicação: primeira mensalidade paga qualifica (recompensa segue manual).
+    if ((ev.amountCents ?? '0') !== '0') await db.updateTable('referrals').set({ status: 'qualified' }).where('referred_tenant_id', '=', ev.tenantId).where('status', '=', 'pending').execute();
   } else if (ev.type === 'invoice.payment_failed') {
     if (inv.status === 'paid') return; // fora de ordem: falha antiga não desfaz pagamento
     if (sub.status === 'active' || sub.status === 'trialing') await transitionSubscription(db, ev.tenantId, 'past_due', 'Falha no pagamento', 'billing', `${key}:past_due`);

@@ -58,7 +58,8 @@ export default function CompaniesPage() {
             setLoading(true);
             setError(null);
             try {
-              await api('tenants', { body: { name } });
+              const referralCode = new URLSearchParams(window.location.search).get('indicacao') || undefined;
+              await api('tenants', { body: { name, referralCode } });
               qc.clear();
               router.push('/app');
             } catch (err) {

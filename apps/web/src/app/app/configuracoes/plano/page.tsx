@@ -58,6 +58,24 @@ function Security() {
   );
 }
 
+function Referral() {
+  const toast = useToast();
+  const q = useQuery({ queryKey: ['referrals'], queryFn: () => api<{ code: string; link: string; pending: number; qualified: number; rewarded: number; rules: string }>('referrals') });
+  if (!q.data) return null;
+  const r = q.data;
+  return (
+    <Card title="Indique outra loja" description={r.rules}>
+      <div className="flex flex-col gap-3 text-sm">
+        <div className="flex flex-wrap items-end gap-2">
+          <Field label="Seu link de indicação" htmlFor="ref-link"><Input id="ref-link" readOnly value={r.link} className="w-80 max-w-full" /></Field>
+          <Button variant="secondary" onClick={async () => { try { await navigator.clipboard.writeText(r.link); toast('Link copiado.'); } catch { toast('Não foi possível copiar; selecione o texto.'); } }}>Copiar</Button>
+        </div>
+        <p className="text-muted">Código <strong className="text-fg">{r.code}</strong> · aguardando pagamento: {r.pending} · qualificadas: {r.qualified} · recompensadas: {r.rewarded}</p>
+      </div>
+    </Card>
+  );
+}
+
 export default function PlanPage() {
   const can = useCan();
   const qc = useQueryClient();
@@ -108,6 +126,7 @@ export default function PlanPage() {
             </Card>
           </>
         )}
+        {can('billing.manage') && <Referral />}
         <Security />
       </div>
     </div>

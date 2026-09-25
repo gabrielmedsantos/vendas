@@ -19,3 +19,5 @@ export * from './misc';
 export * from './images';
 export * from './storefront';
 export * from './platform';
+export * from './aftersales';
+export * from './growth';

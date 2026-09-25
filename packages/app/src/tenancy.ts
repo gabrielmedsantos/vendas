@@ -62,6 +62,8 @@ export interface ProvisionInput {
   slug?: string;
   timezone?: string;
   document?: string;
+  /** Código de indicação (opcional). Inválido ou autoindicação é ignorado sem bloquear o cadastro. */
+  referralCode?: string;
 }
 
 /**
@@ -124,6 +126,11 @@ export async function provisionTenant(deps: AppDeps, userId: string, input: Prov
       .values({ tenant_id: tenant.id, subscription_id: sub.id, to_status: trial ? 'trialing' : 'active', reason: 'Criação da empresa', actor: userId })
       .execute();
     if (!claimed) await trx.insertInto('trial_claims').values({ user_id: userId, tenant_id: tenant.id }).execute();
+    if (input.referralCode) {
+      const ref = await trx.selectFrom('referral_codes').select('tenant_id').where('code', '=', input.referralCode.trim().toUpperCase()).executeTakeFirst();
+      const own = ref && (await trx.selectFrom('memberships').select('user_id').where('tenant_id', '=', ref.tenant_id).where('user_id', '=', userId).executeTakeFirst());
+      if (ref && !own) await trx.insertInto('referrals').values({ referrer_tenant_id: ref.tenant_id, referred_tenant_id: tenant.id }).execute();
+    }
     return tenant.id;
   });
 

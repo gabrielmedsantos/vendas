@@ -19,12 +19,14 @@ export interface OutboxEvent {
 const MAX_ATTEMPTS = 8;
 
 /** Reivindica eventos com lease (SKIP LOCKED): vários workers não pegam o mesmo evento. */
-export async function claimEvents(deps: AppDeps, limit = 10): Promise<OutboxEvent[]> {
+/** `tenantId` restringe a uma empresa (reprocessamento dirigido e testes paralelos). */
+export async function claimEvents(deps: AppDeps, limit = 10, tenantId?: string): Promise<OutboxEvent[]> {
   const r = await sql<OutboxEvent>`
     update outbox_events set status = 'processing', locked_until = now() + interval '2 minutes', attempts = attempts + 1
     where id in (
       select id from outbox_events
-      where (status = 'pending' and available_at <= now()) or (status = 'processing' and locked_until < now())
+      where ((status = 'pending' and available_at <= now()) or (status = 'processing' and locked_until < now()))
+        and (${tenantId ?? null}::uuid is null or tenant_id = ${tenantId ?? null}::uuid)
       order by available_at limit ${limit} for update skip locked)
     returning id, tenant_id, type, payload, attempts`.execute(deps.dbs.platform);
   return r.rows;
@@ -62,8 +64,8 @@ export async function handleEvent(deps: AppDeps, ev: OutboxEvent): Promise<void>
   }
 }
 
-export async function processOutboxBatch(deps: AppDeps, limit = 10): Promise<{ processed: number; failed: number }> {
-  const events = await claimEvents(deps, limit);
+export async function processOutboxBatch(deps: AppDeps, limit = 10, tenantId?: string): Promise<{ processed: number; failed: number }> {
+  const events = await claimEvents(deps, limit, tenantId);
   let failed = 0;
   for (const ev of events) {
     try {

@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { RotateCcw, XCircle } from 'lucide-react';
 import { formatBRL } from '@gct/shared';
+import { SaleWarranty } from '@/components/aftersales/warranty';
 import { DocLinks } from '@/components/docs/doc-links';
 import { useAccounts } from '@/components/ops/hooks';
 import { Badge, Button, Card, ErrorState, Field, FormError, Input, LoadingBlock, Modal, PageHeader, Select, Table, Td, Th } from '@/components/ui';
@@ -105,6 +106,7 @@ export default function SaleDetail() {
             {d.titles.length > 0 && <p className="mt-3 border-t border-line pt-2 text-sm">Em aberto: <strong className="tabular">{formatBRL(open)}</strong></p>}
           </Card>
           <Card title="Documentos"><DocLinks docs={d.documents} /></Card>
+          {['confirmed', 'partially_returned'].includes(s.status) && <Card title="Garantia"><SaleWarranty saleId={s.id} items={d.items.filter((i) => i.productKind === 'physical')} canOpen={can('sales.create')} /></Card>}
           {s.notes && <Card title="Observações"><p className="text-sm text-muted">{s.notes}</p></Card>}
         </div>
       </div>
