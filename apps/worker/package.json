@@ -10,10 +10,11 @@
     "start:prod": "node --enable-source-maps dist/worker.js"
   },
   "devDependencies": {
-    "esbuild": "0.28.2",
     "@gct/app": "workspace:*",
     "@gct/db": "workspace:*",
-    "@gct/shared": "workspace:*"
+    "@gct/shared": "workspace:*",
+    "better-auth": "1.7.6",
+    "esbuild": "0.28.2"
   },
   "dependencies": {
     "kysely": "0.29.6",

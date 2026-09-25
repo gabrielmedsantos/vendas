@@ -4,7 +4,8 @@
  * da aplicação (nada é inserido "por fora" nas tabelas de negócio).
  *
  * Uso: SEED_PASSWORD='senha-com-10+' pnpm --filter @gct/web seed:demo
- * Recusa rodar com NODE_ENV=production ou APP_URL https, salvo SEED_ALLOW_REMOTE=1.
+ * Só roda quando APP_URL aponta para localhost/127.0.0.1; em homologação isolada use SEED_ALLOW_REMOTE=1.
+ * No Docker local: docker compose --env-file .env.production run --rm -e SEED_PASSWORD=... worker node dist/seed-demo.js
  * Idempotente por e-mail: se o usuário demo já existe, não recria. SEED_TAG muda os e-mails
  * (ex.: SEED_TAG=v2) para gerar um novo conjunto sem tocar no anterior.
  */
@@ -16,8 +17,9 @@ import { todayLocal } from '@gct/app';
 
 const password = process.env.SEED_PASSWORD ?? '';
 if (password.length < 10) throw new Error('Defina SEED_PASSWORD (mínimo 10 caracteres) para os usuários demo.');
-if ((process.env.NODE_ENV === 'production' || (process.env.APP_URL ?? '').startsWith('https://')) && process.env.SEED_ALLOW_REMOTE !== '1')
-  throw new Error('Seed recusado em produção. Use SEED_ALLOW_REMOTE=1 apenas em homologação isolada.');
+const appHost = (() => { try { return new URL(process.env.APP_URL ?? 'http://localhost').hostname; } catch { return ''; } })();
+if (!['localhost', '127.0.0.1'].includes(appHost) && process.env.SEED_ALLOW_REMOTE !== '1')
+  throw new Error('Seed recusado: APP_URL não é local. Use SEED_ALLOW_REMOTE=1 apenas em homologação isolada.');
 
 const dbs = createDatabases(databaseConfigFromEnv());
 const deps: A.AppDeps = { dbs, storage: new A.LocalStorage(process.env.STORAGE_PATH ?? './storage'), mailer: new A.MemoryMailer() };

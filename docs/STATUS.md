@@ -34,6 +34,9 @@ Fases 0–8 implementadas e testadas localmente. **Nada foi implantado na VPS** 
 - BrikLucro: só a página pública (BR-01) foi vista; área interna não.
 - Preços dos planos são provisórios (R$ 0 no piloto).
 
+## Testar localmente com Docker
+`bash infra/local/start.sh` (ou `infra\local\start.ps1` no Windows): gera `.env.production` local, sobe banco/migração/web/worker e cria as empresas demo (senha `demo-senha-local`). Verificado em clone limpo nesta sessão: login demo e painel sem erros de console.
+
 ## Como retomar
 ```bash
 pnpm install
