@@ -31,7 +31,7 @@ export const UNIT_TRANSITIONS: Machine<'inspection' | 'available' | 'reserved' |
 
 export const SUBSCRIPTION_TRANSITIONS: Machine<'trialing' | 'active' | 'past_due' | 'suspended' | 'canceled'> = {
   trialing: ['active', 'past_due', 'suspended', 'canceled'],
-  active: ['past_due', 'canceled', 'active'],
+  active: ['past_due', 'suspended', 'canceled', 'active'],
   past_due: ['active', 'suspended', 'canceled'],
   suspended: ['active', 'canceled'],
   canceled: ['active'],

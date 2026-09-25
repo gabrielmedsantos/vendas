@@ -71,7 +71,7 @@ export async function returnInTx(
     let revenueRows = 0;
     if (si.product_kind === 'physical') {
       // Devolve das alocações mais recentes (LIFO sobre o consumo), custo proporcional por alocação.
-      const allocs = await trx.selectFrom('sale_cost_allocations').selectAll().where('sale_item_id', '=', si.id).orderBy('id', 'desc').forUpdate().execute();
+      const allocs = await trx.selectFrom('sale_cost_allocations').selectAll().where('sale_item_id', '=', si.id).orderBy('seq', 'desc').forUpdate().execute();
       let need = qty;
       for (const a of allocs) {
         if (need === 0) break;

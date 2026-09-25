@@ -1,6 +1,6 @@
 import {
   ArrowLeftRight, BarChart3, Boxes, Building2, ClipboardList, CreditCard, FileText, HandCoins, Home, Landmark, Package, Receipt, Settings,
-  ShoppingBag, ShoppingCart, Tags, Users, Wallet, type LucideIcon,
+  ShoppingBag, ShoppingCart, Store, Tags, Users, Wallet, type LucideIcon,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -37,6 +37,10 @@ export const NAV: { group: string; items: NavItem[] }[] = [
   {
     group: 'Cadastros',
     items: [{ href: '/app/pessoas', label: 'Clientes e fornecedores', icon: Users, perm: 'parties.view' }],
+  },
+  {
+    group: 'Vendas online',
+    items: [{ href: '/app/catalogo', label: 'Catálogo', icon: Store, perm: 'catalog.manage' }],
   },
   {
     group: 'Configurações',

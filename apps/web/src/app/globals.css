@@ -55,6 +55,7 @@ body {
 
 .tabular {
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 dialog::backdrop {

@@ -59,8 +59,8 @@ export function RevenueChart({ data }: { data: SeriesPoint[] }) {
                 labelFormatter={(d) => dateBR(String(d))}
                 formatter={(v, name) => [formatBRL(BigInt(Math.round(Number(v)))), name === 'revenue' ? 'Receita' : 'Resultado bruto']}
               />
-              <Area type="monotone" dataKey="revenue" stroke={S1} strokeWidth={2} fill="url(#rev)" activeDot={{ r: 4, strokeWidth: 2, stroke: '#12131c' }} />
-              {hasProfit && <Line type="monotone" dataKey="profit" stroke={S2} strokeWidth={2} strokeDasharray="5 4" dot={false} activeDot={{ r: 4, strokeWidth: 2, stroke: '#12131c' }} />}
+              <Area type="monotone" dataKey="revenue" stroke={S1} strokeWidth={2} fill="url(#rev)" isAnimationActive={false} activeDot={{ r: 4, strokeWidth: 2, stroke: '#12131c' }} />
+              {hasProfit && <Line type="monotone" dataKey="profit" stroke={S2} strokeWidth={2} strokeDasharray="5 4" dot={false} isAnimationActive={false} activeDot={{ r: 4, strokeWidth: 2, stroke: '#12131c' }} />}
             </AreaChart>
           </ResponsiveContainer>
         </div>

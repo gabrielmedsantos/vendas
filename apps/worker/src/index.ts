@@ -1,5 +1,5 @@
 import { createDatabases, databaseConfigFromEnv } from '@gct/db';
-import { createMailerFromEnv, LocalStorage, processOutboxBatch, queueHealth, runPeriodicJobs, snapshotDailyStock, type AppDeps } from '@gct/app';
+import { createMailerFromEnv, LocalStorage, processOutboxBatch, processWebhookEvents, queueHealth, runPeriodicJobs, snapshotDailyStock, type AppDeps } from '@gct/app';
 
 /**
  * Worker: consome o outbox (PDFs, exportações, avisos) e executa rotinas
@@ -20,7 +20,9 @@ async function outboxLoop() {
     try {
       const r = await processOutboxBatch(deps, 20);
       if (r.processed) log('info', 'outbox', r);
-      if (r.processed === 0) await sleep(1000);
+      const w = await processWebhookEvents(deps, 20);
+      if (w) log('info', 'webhooks de cobrança', { processed: w });
+      if (r.processed === 0 && w === 0) await sleep(1000);
     } catch (e) {
       log('error', 'falha no loop do outbox', { error: (e as Error).message });
       await sleep(5000);

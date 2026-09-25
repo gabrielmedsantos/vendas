@@ -16,3 +16,6 @@ export * from './jobs';
 export * from './adapters';
 export { renderDocumentPdf } from './pdf';
 export * from './misc';
+export * from './images';
+export * from './storefront';
+export * from './platform';

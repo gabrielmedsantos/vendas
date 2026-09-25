@@ -164,6 +164,30 @@ export const routes: RouteDef[] = [
     method: 'POST', path: 'products/:id/status',
     handler: async ({ deps, actor, params, body }) => A.setProductStatus(deps, actor, id(params), p(z.object({ status: z.enum(['active', 'inactive', 'archived']) }), await body()).status),
   },
+  {
+    method: 'POST', path: 'products/:id/images', rate: { max: 60, windowMs: 3600_000 },
+    handler: async ({ deps, actor, params, req }) => {
+      const ct = req.headers.get('content-type') ?? '';
+      if (!ct.startsWith('multipart/form-data')) throw new AppError('validation_failed', 'Envie a foto como multipart/form-data.');
+      const len = Number(req.headers.get('content-length') ?? 0);
+      if (len > 6 * 1024 * 1024) throw new AppError('validation_failed', 'Imagem deve ter até 5 MB.');
+      const form = await req.formData();
+      const file = form.get('file');
+      if (!(file instanceof File)) throw new AppError('validation_failed', 'Arquivo ausente.');
+      return A.addProductImage(deps, actor, id(params), Buffer.from(await file.arrayBuffer()), file.name);
+    },
+  },
+  {
+    method: 'DELETE', path: 'products/:id/images/:imageId',
+    handler: ({ deps, actor, params }) => A.removeProductImage(deps, actor, id(params), p(z.object({ imageId: z.string().uuid() }), params).imageId),
+  },
+  {
+    method: 'GET', path: 'attachments/:id',
+    handler: async ({ deps, actor, params }) => {
+      const f = await A.readAttachment(deps, actor, id(params));
+      return new Response(new Uint8Array(f.data), { headers: { 'content-type': f.mime, 'cache-control': 'private, max-age=3600', 'x-content-type-options': 'nosniff' } });
+    },
+  },
   { method: 'GET', path: 'products/:id/history', handler: ({ deps, actor, params }) => A.productHistory(deps, actor, id(params)) },
   { method: 'GET', path: 'variants/:id', handler: ({ deps, actor, params }) => A.getSellableVariant(deps, actor, id(params)) },
   { method: 'GET', path: 'variants/:id/units', handler: ({ deps, actor, params }) => A.availableUnits(deps, actor, id(params)) },
@@ -305,6 +329,31 @@ export const routes: RouteDef[] = [
     },
   },
 
+  // ---------------------------------------------------------------- catálogo público (gestão)
+  { method: 'GET', path: 'catalog', handler: ({ deps, actor }) => A.getCatalogAdmin(deps, actor) },
+  { method: 'PUT', path: 'catalog', handler: async ({ deps, actor, body }) => A.saveCatalog(deps, actor, p(A.zCatalog, await body())) },
+  {
+    method: 'PUT', path: 'catalog/items',
+    handler: async ({ deps, actor, body }) => A.setCatalogItems(deps, actor, p(z.object({ variantIds: z.array(z.string().uuid()).max(500) }), await body()).variantIds),
+  },
+  {
+    method: 'POST', path: 'catalog/publish',
+    handler: async ({ deps, actor, body }) => A.setCatalogPublished(deps, actor, p(z.object({ published: z.boolean() }), await body()).published),
+  },
+  { method: 'GET', path: 'catalog/analytics', handler: ({ deps, actor }) => A.catalogAnalytics(deps, actor) },
+  { method: 'GET', path: 'catalog/orders', handler: ({ deps, actor }) => A.listPublicOrders(deps, actor) },
+  {
+    method: 'POST', path: 'catalog/orders/:id/reserve',
+    handler: async ({ deps, actor, params, body }) => A.reservePublicOrder(deps, actor, id(params), p(z.object({ hours: z.number().int().min(1).max(168).default(24) }), await body()).hours),
+  },
+  {
+    method: 'POST', path: 'catalog/orders/:id/close',
+    handler: async ({ deps, actor, params, body }) => {
+      const input = p(z.object({ status: z.enum(['converted', 'canceled']), saleId: z.string().uuid().optional() }), await body());
+      await A.closePublicOrder(deps, actor, id(params), input.status, input.saleId);
+    },
+  },
+
   // ---------------------------------------------------------------- métricas, relatórios, exportação, documentos
   { method: 'GET', path: 'dashboard', handler: ({ deps, actor, query }) => A.getDashboard(deps, actor, p(A.zPeriod, queryObject(query))) },
   { method: 'GET', path: 'metrics', handler: ({ deps, actor, query }) => A.getMetrics(deps, actor, p(A.zPeriod, queryObject(query))) },
@@ -337,6 +386,43 @@ export const routes: RouteDef[] = [
     },
   },
   { method: 'POST', path: 'documents/:id/retry', handler: ({ deps, actor, params }) => A.retryDocument(deps, actor, id(params)) },
+
+  // ---------------------------------------------------------------- administração da plataforma (control plane)
+  { method: 'GET', path: 'platform/me', noTenant: true, handler: async ({ deps, session }) => A.resolvePlatformAdmin(deps, session.user) },
+  { method: 'GET', path: 'platform/overview', noTenant: true, handler: async ({ deps, session }) => { await A.resolvePlatformAdmin(deps, session.user); return A.platformOverview(deps); } },
+  { method: 'GET', path: 'platform/tenants', noTenant: true, handler: async ({ deps, session, query }) => { await A.resolvePlatformAdmin(deps, session.user); return A.platformTenants(deps, query.get('q')?.slice(0, 80) || undefined); } },
+  {
+    method: 'POST', path: 'platform/tenants/:id/status', noTenant: true,
+    handler: async ({ deps, session, params, body }) => {
+      const admin = await A.resolvePlatformAdmin(deps, session.user);
+      const input = p(zReason.extend({ action: z.enum(['suspend', 'reactivate']) }), await body());
+      return A.platformSetTenantStatus(deps, admin, id(params), input.action, input.reason);
+    },
+  },
+  {
+    method: 'POST', path: 'platform/tenants/:id/plan', noTenant: true,
+    handler: async ({ deps, session, params, body }) => {
+      const admin = await A.resolvePlatformAdmin(deps, session.user);
+      const input = p(zReason.extend({ planVersionId: z.string().uuid() }), await body());
+      return A.platformChangePlan(deps, admin, id(params), input.planVersionId, input.reason);
+    },
+  },
+  { method: 'GET', path: 'platform/plans', noTenant: true, handler: async ({ deps, session }) => { await A.resolvePlatformAdmin(deps, session.user); return A.platformPlans(deps); } },
+  {
+    method: 'POST', path: 'platform/plans', noTenant: true,
+    handler: async ({ deps, session, body }) => A.platformSavePlanVersion(deps, await A.resolvePlatformAdmin(deps, session.user), p(A.zPlanVersion, await body())),
+  },
+  { method: 'GET', path: 'platform/invoices', noTenant: true, handler: async ({ deps, session, query }) => { await A.resolvePlatformAdmin(deps, session.user); return A.platformInvoices(deps, query.get('tenantId') ?? undefined); } },
+  {
+    method: 'POST', path: 'platform/invoices', noTenant: true,
+    handler: async ({ deps, session, body }) => A.platformCreateInvoice(deps, await A.resolvePlatformAdmin(deps, session.user), p(A.zInvoice, await body())),
+  },
+  {
+    method: 'POST', path: 'platform/invoices/:id/paid', noTenant: true,
+    handler: async ({ deps, session, params, body }) => A.platformMarkInvoicePaid(deps, await A.resolvePlatformAdmin(deps, session.user), id(params), p(zReason, await body()).reason),
+  },
+  { method: 'GET', path: 'platform/audit', noTenant: true, handler: async ({ deps, session }) => { await A.resolvePlatformAdmin(deps, session.user); return A.platformAuditLog(deps); } },
+  { method: 'GET', path: 'platform/webhooks', noTenant: true, handler: async ({ deps, session }) => { await A.resolvePlatformAdmin(deps, session.user); return A.platformWebhooks(deps); } },
 ];
 
 export { AppError, getSession, clientIp, rateLimit };

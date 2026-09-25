@@ -777,6 +777,7 @@ export interface SaleCostAllocations {
   returned_cost_cents: Generated<bigint>;
   returned_qty: Generated<number>;
   sale_item_id: string;
+  seq: Generated<bigint>;
   tenant_id: string;
   unit_id: string | null;
 }

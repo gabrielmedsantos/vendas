@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { Archive, History, ShoppingBag, ShoppingCart, SlidersHorizontal } from 'lucide-react';
 import { AdjustModal } from '@/components/products/adjust-modal';
+import { ProductPhotos } from '@/components/products/photos';
 import { ProductForm, toApi, type ProductFormValue } from '@/components/products/product-form';
 import { Badge, Button, Card, ErrorState, LinkButton, LoadingBlock, PageHeader, Table, Tabs, Td, Th } from '@/components/ui';
 import { useToast } from '@/components/toast';
@@ -18,6 +19,7 @@ interface Product {
   status: 'active' | 'inactive' | 'archived'; conditionDefault: string | null; warrantyDays: number; identifierKinds: string[]; version: number;
   variants: { id: string; sku: string; barcode: string | null; label: string; retailPriceCents: string; wholesalePriceCents: string | null; wholesaleMinQty: number | null; suggestedPriceCents: string | null; minStock: number; onHand: number; reserved: number; inspection: number }[];
   units: { id: string; internalCode: string; status: string; condition: string | null; batteryHealthPct: number | null; identifiers: { kind: string; value: string }[]; costCents?: string | null; createdAt: string }[];
+  images: { attachmentId: string }[];
   lots?: { id: string; sourceType: string; status: string; receivedAt: string; qtyReceived: number; qtyRemaining: number; costRemainingCents: string }[];
   canSeeCost: boolean;
 }
@@ -89,6 +91,7 @@ export default function ProductPage() {
               </Table>
             </Card>
           )}
+          <ProductPhotos productId={p.id} images={p.images} canManage={can('products.manage')} />
           {p.description && <Card title="Descrição"><p className="whitespace-pre-wrap text-sm text-muted">{p.description}</p></Card>}
         </div>
       )}
