@@ -563,3 +563,22 @@ export async function availableUnits(deps: AppDeps, actor: Actor, variantId: str
     return rows;
   });
 }
+
+/** Resumo de uma variante para pré-seleção em venda/compra/troca. */
+export async function getSellableVariant(deps: AppDeps, actor: Actor, variantId: string) {
+  requirePermission(actor, 'products.view');
+  const showCost = can(actor, 'costs.view');
+  return tx(deps, actor, async (trx) => {
+    const r = await sql<Record<string, unknown>>`
+      select v.id as variant_id, p.id as product_id, p.name, v.sku, v.label, p.kind, p.tracking, p.status,
+             v.retail_price_cents, v.wholesale_price_cents, v.wholesale_min_qty,
+             coalesce((select sum(b.on_hand - b.reserved) from stock_balances b where b.variant_id = v.id), 0)::int as available,
+             (select case when sum(l.qty_remaining) > 0 then round(sum(l.cost_remaining_cents) / sum(l.qty_remaining))::bigint end
+                from inventory_lots l where l.variant_id = v.id and l.status = 'available' and l.qty_remaining > 0) as unit_cost_cents
+      from product_variants v join products p on p.id = v.product_id where v.id = ${variantId}`.execute(trx);
+    const row = r.rows[0];
+    if (!row) throw notFound('Produto');
+    if (!showCost) delete row.unit_cost_cents;
+    return row;
+  });
+}

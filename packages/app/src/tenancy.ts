@@ -185,6 +185,8 @@ export async function listMembers(deps: AppDeps, actor: Actor) {
   });
 }
 
+export const ROLES_FOR_INVITE = ['owner', 'manager', 'seller', 'stock', 'finance', 'viewer'] as const;
+
 export function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }

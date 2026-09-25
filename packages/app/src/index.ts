@@ -15,3 +15,4 @@ export * from './metrics';
 export * from './jobs';
 export * from './adapters';
 export { renderDocumentPdf } from './pdf';
+export * from './misc';

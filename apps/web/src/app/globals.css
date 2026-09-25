@@ -1,0 +1,70 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+
+/*
+ * Tokens derivados da prancha FlowPay FP-04. Botão primário usa #7B4FF5 (derivado)
+ * porque branco sobre #8A62FF tem contraste 3,98:1 (< AA 4,5). Demais cores
+ * semânticas verificadas ≥ 4,5:1 sobre fundo e superfície.
+ */
+@theme {
+  --font-sans: 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif;
+  --color-bg: #0d0e17;
+  --color-surface: #12131c;
+  --color-surface-2: #181a26;
+  --color-surface-3: #20222f;
+  --color-line: #262839;
+  --color-line-strong: #34374b;
+  --color-fg: #ececf3;
+  --color-muted: #9a9cb0;
+  --color-primary: #8a62ff;
+  --color-primary-btn: #7b4ff5;
+  --color-primary-btn-hover: #6d3beb;
+  --color-primary-soft: #a78bfa;
+  --color-success: #7cfeb2;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-danger-soft: #f87171;
+  --color-info: #60a5fa;
+  --radius-card: 1rem;
+  /* Séries validadas (dataviz validator, superfície #12131C): ΔE CVD 27, normal 28 */
+  --color-series-1: #8a62ff;
+  --color-series-2: #d95926;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-primary) 45%, transparent);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+dialog::backdrop {
+  background: rgb(5 6 12 / 0.72);
+  backdrop-filter: blur(2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -1,0 +1,151 @@
+import { expect, test, type Page } from '@playwright/test';
+
+/**
+ * Jornada principal (doc 09): cadastro → compra → recebimento → venda →
+ * troca → receber diferença → devolução parcial → relatório.
+ * Dados sintéticos; nenhum IMEI real.
+ */
+const run = Date.now().toString(36);
+const email = `e2e-${run}@example.test`;
+const password = 'senha-e2e-segura-1';
+
+async function money(page: Page, label: string | RegExp, value: string) {
+  const input = page.getByRole('textbox', { name: label }).first();
+  await input.fill(value);
+  await input.blur();
+}
+
+async function pickProduct(page: Page, term: string, text: RegExp, nth = 0) {
+  const search = page.getByLabel('Buscar produto').nth(nth);
+  await search.click();
+  await search.pressSequentially(term, { delay: 20 });
+  await page.getByRole('button', { name: text }).first().click();
+}
+
+async function pickParty(page: Page, label: string, name: string) {
+  await page.getByLabel(label, { exact: true }).fill(name.slice(0, 6));
+  await page.getByRole('button', { name: new RegExp(name) }).first().click();
+}
+
+test.describe.serial('jornada completa', () => {
+  let page: Page;
+  test.beforeAll(async ({ browser }) => {
+    page = await browser.newPage();
+  });
+
+  test('cadastro e empresa', async () => {
+    await page.goto('/cadastro');
+    await page.getByLabel('Nome completo').fill('Pessoa E2E');
+    await page.getByLabel('E-mail').fill(email);
+    await page.getByLabel('Senha', { exact: true }).fill(password);
+    await page.getByLabel('Confirme a senha').fill(password);
+    await page.getByRole('checkbox').check();
+    await page.getByRole('button', { name: 'Criar conta' }).click();
+    await page.waitForURL('**/app/empresas');
+    await page.getByRole('textbox', { name: 'Nome fantasia' }).fill(`Loja E2E ${run}`);
+    await page.getByRole('button', { name: 'Criar empresa' }).click();
+    await page.waitForURL(/\/app$/);
+    await expect(page.getByRole('heading', { name: 'Início' })).toBeVisible();
+  });
+
+  test('produtos', async () => {
+    for (const p of [
+      { name: 'Celular Demo', sku: `CEL-${run}`, price: '4000', serial: true },
+      { name: 'Capa Demo', sku: `CAPA-${run}`, price: '50', serial: false },
+    ]) {
+      await page.goto('/app/produtos/novo');
+      if (p.serial) await page.getByLabel('Controle de estoque').selectOption('serialized');
+      await page.getByRole('textbox', { name: 'Nome', exact: true }).fill(p.name);
+      await page.getByRole('textbox', { name: 'SKU', exact: true }).fill(p.sku);
+      await money(page, 'Preço de varejo', p.price);
+      await page.getByRole('button', { name: 'Cadastrar' }).click();
+      await expect(page.getByRole('heading', { name: p.name })).toBeVisible();
+    }
+  });
+
+  test('compra com recebimento e IMEI', async () => {
+    await page.goto('/app/compras/nova');
+    await page.getByRole('button', { name: 'Cadastrar fornecedor' }).click();
+    await page.getByRole('dialog').getByRole('textbox', { name: 'Nome', exact: true }).fill('Distribuidora Demo');
+    await page.getByRole('dialog').getByRole('button', { name: 'Salvar', exact: true }).click();
+    await expect(page.getByRole('dialog')).toBeHidden();
+    await pickProduct(page, 'Celular', /Celular Demo/);
+    await page.getByLabel('IMEI', { exact: true }).fill(`DEMO-IMEI-${run}-OUT`);
+    await money(page, /Custo unitário acordado/, '3000');
+    await pickProduct(page, 'Capa', /Capa Demo/);
+    const qtys = page.getByLabel('Quantidade');
+    await qtys.nth(1).fill('10');
+    await page.getByLabel(/Custo unitário acordado/).nth(1).fill('20');
+    await page.getByLabel(/Custo unitário acordado/).nth(1).blur();
+    await page.getByRole('button', { name: 'Confirmar compra e receber tudo' }).click();
+    await expect(page.getByRole('heading', { name: /Compra #/ })).toBeVisible();
+    await expect(page.getByText('Recebida').first()).toBeVisible();
+  });
+
+  test('venda simples com Pix', async () => {
+    await page.goto('/app/vendas/nova');
+    await pickProduct(page, 'Capa', /Capa Demo/);
+    await page.getByRole('button', { name: 'Aumentar' }).click();
+    await page.getByLabel('Forma 1').selectOption({ label: 'Pix' });
+    await page.getByRole('button', { name: 'Revisar e confirmar' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Confirmar venda' }).click();
+    await expect(page.getByRole('heading', { name: /Venda #/ })).toBeVisible();
+    await expect(page.getByText('R$ 100,00').first()).toBeVisible();
+  });
+
+  test('troca: cliente entrega usado e paga a diferença', async () => {
+    await page.goto('/app/trocas/nova');
+    await page.getByRole('button', { name: 'Cadastrar cliente' }).click();
+    await page.getByRole('dialog').getByRole('textbox', { name: 'Nome', exact: true }).fill('Cliente Demonstração');
+    await page.getByRole('dialog').getByRole('button', { name: 'Salvar', exact: true }).click();
+    await expect(page.getByRole('dialog')).toBeHidden();
+    await pickProduct(page, 'Celular', /Celular Demo/);
+    await page.getByLabel('Unidade').selectOption({ index: 1 });
+    await page.getByLabel('Nome do produto recebido').fill('Celular usado Demo');
+    await page.getByLabel('IMEI 1').fill(`DEMO-IMEI-${run}-IN`);
+    await money(page, 'Valor acordado (avaliação)', '1500');
+    await expect(page.getByText('Cliente paga à empresa').first()).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: 'Diferença' })).toContainText('R$ 2.500,00');
+    await page.getByLabel('Forma 1').selectOption({ label: 'Pix' });
+    await expect(page.getByText('Resultado bruto da venda')).toBeVisible();
+    await page.getByRole('button', { name: 'Revisar troca' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Confirmar troca' }).click();
+    await expect(page.getByRole('heading', { name: /Troca #/ })).toBeVisible();
+    await expect(page.getByText('R$ 1.500,00').first()).toBeVisible();
+    await expect(page.getByText('Recebido · Pix')).toBeVisible();
+  });
+
+  test('venda no crediário, recebimento parcial e devolução parcial', async () => {
+    await page.goto('/app/vendas/nova');
+    await pickProduct(page, 'Capa', /Capa Demo/);
+    await page.getByRole('spinbutton', { name: 'Quantidade' }).first().fill('3');
+    await pickParty(page, 'Cliente', 'Cliente Demonstração');
+    await page.getByLabel('Forma 1').selectOption({ label: 'Crediário / fiado' });
+    await page.getByRole('button', { name: 'Revisar e confirmar' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Confirmar venda' }).click();
+    await expect(page.getByRole('heading', { name: /Venda #/ })).toBeVisible();
+    const saleUrl = page.url();
+
+    await page.goto('/app/financeiro/receber');
+    await page.getByRole('checkbox', { name: /Venda #/ }).first().check();
+    await page.getByRole('button', { name: 'Receber selecionados' }).click();
+    await page.getByLabel(/Venda #.*saldo/).fill('40');
+    await page.getByLabel(/Venda #.*saldo/).blur();
+    await page.getByRole('checkbox', { name: /Confirmo que o valor/ }).check();
+    await page.getByRole('dialog').getByRole('button', { name: 'Confirmar', exact: true }).click();
+    await expect(page.getByText('Parcial').first()).toBeVisible();
+
+    await page.goto(saleUrl);
+    await page.getByRole('button', { name: 'Devolução' }).click();
+    await page.getByLabel(/Capa Demo \(devolvível 3\)/).fill('1');
+    await page.getByRole('textbox', { name: 'Motivo' }).fill('Defeito de costura');
+    await page.getByRole('dialog').getByRole('button', { name: 'Confirmar devolução' }).click();
+    await expect(page.getByText(/Devolução nº/)).toBeVisible();
+  });
+
+  test('relatório de resultado', async () => {
+    await page.goto('/app/relatorios');
+    await expect(page.getByRole('cell', { name: '= Receita líquida' })).toBeVisible();
+    await expect(page.getByRole('cell', { name: '= Resultado bruto' })).toBeVisible();
+  });
+});
