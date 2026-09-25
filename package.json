@@ -15,7 +15,7 @@
     "test:int": "vitest run --project integration",
     "test:all": "vitest run",
     "db:migrate": "pnpm --filter @gct/db migrate",
-    "db:seed": "pnpm --filter @gct/db seed",
+    "db:seed": "pnpm --filter @gct/web seed:demo",
     "dev": "pnpm --filter @gct/web dev",
     "worker": "pnpm --filter @gct/worker start",
     "platform:admin": "pnpm --filter @gct/db platform:admin"

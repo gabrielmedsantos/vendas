@@ -447,6 +447,15 @@ export const routes: RouteDef[] = [
     method: 'POST', path: 'platform/invoices/:id/paid', noTenant: true,
     handler: async ({ deps, session, params, body }) => A.platformMarkInvoicePaid(deps, await A.resolvePlatformAdmin(deps, session.user), id(params), p(zReason, await body()).reason),
   },
+  { method: 'GET', path: 'platform/referrals', noTenant: true, handler: async ({ deps, session }) => { await A.resolvePlatformAdmin(deps, session.user); return A.platformReferrals(deps); } },
+  {
+    method: 'POST', path: 'platform/referrals/:id/status', noTenant: true,
+    handler: async ({ deps, session, params, body }) => {
+      const admin = await A.resolvePlatformAdmin(deps, session.user);
+      const input = p(zReason.extend({ status: z.enum(['rewarded', 'rejected']) }), await body());
+      return A.platformSetReferralStatus(deps, admin, id(params), input.status, input.reason);
+    },
+  },
   { method: 'GET', path: 'platform/audit', noTenant: true, handler: async ({ deps, session }) => { await A.resolvePlatformAdmin(deps, session.user); return A.platformAuditLog(deps); } },
   { method: 'GET', path: 'platform/webhooks', noTenant: true, handler: async ({ deps, session }) => { await A.resolvePlatformAdmin(deps, session.user); return A.platformWebhooks(deps); } },
 ];

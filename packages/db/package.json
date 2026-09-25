@@ -8,7 +8,6 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "migrate": "tsx scripts/migrate.ts",
-    "seed": "tsx scripts/seed.ts",
     "codegen": "tsx scripts/codegen.ts",
     "platform:admin": "tsx scripts/platform-admin.ts"
   },

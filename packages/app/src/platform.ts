@@ -268,3 +268,27 @@ export async function applyBillingEvent(deps: AppDeps, ev: BillingEvent, key: st
     if (sub.status === 'active' || sub.status === 'trialing') await transitionSubscription(db, ev.tenantId, 'past_due', 'Falha no pagamento', 'billing', `${key}:past_due`);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Indicações: qualificação automática no primeiro pagamento; recompensa manual e auditada.
+
+export async function platformReferrals(deps: AppDeps) {
+  return deps.dbs.platform
+    .selectFrom('referrals as r')
+    .innerJoin('tenants as a', 'a.id', 'r.referrer_tenant_id')
+    .innerJoin('tenants as b', 'b.id', 'r.referred_tenant_id')
+    .select(['r.id', 'r.status', 'r.created_at', 'a.name as referrer_name', 'b.name as referred_name', 'r.referrer_tenant_id'])
+    .orderBy('r.created_at', 'desc')
+    .limit(200)
+    .execute();
+}
+
+export async function platformSetReferralStatus(deps: AppDeps, admin: PlatformAdmin, id: string, to: 'rewarded' | 'rejected', reason: string) {
+  if (admin.role !== 'admin') throw forbidden();
+  const r = await deps.dbs.platform.selectFrom('referrals').select(['status', 'referrer_tenant_id']).where('id', '=', id).executeTakeFirst();
+  if (!r) throw notFound('Indicação');
+  if (to === 'rewarded' && r.status !== 'qualified') throw invalid('Só indicações qualificadas (primeiro pagamento confirmado) podem ser recompensadas.');
+  if (r.status === 'rewarded' || r.status === 'rejected') throw conflict('Indicação já encerrada.');
+  await platformAudit(deps.dbs.platform, admin, `referral.${to}`, r.referrer_tenant_id, reason, { referralId: id });
+  await deps.dbs.platform.updateTable('referrals').set({ status: to }).where('id', '=', id).execute();
+}

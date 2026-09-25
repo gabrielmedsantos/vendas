@@ -3,7 +3,7 @@
 Atualizado em 25/09/2026. Decisões em `docs/DECISOES.md`; operação em `docs/RUNBOOK.md`.
 
 ## Resumo
-Fases 0–7 implementadas e testadas localmente; fase 8 parcialmente (catálogo público, fotos). **Nada foi implantado na VPS** (inventário ainda não feito). Git: commits locais no branch `claude/new-session-z10cuu`; push bloqueado por falta de acesso do app GitHub ao repositório.
+Fases 0–8 implementadas e testadas localmente. **Nada foi implantado na VPS** (inventário ainda não feito). Git: commits locais no branch `claude/new-session-z10cuu`; push bloqueado por falta de acesso do app GitHub ao repositório.
 
 | Fase | Estado | Evidência |
 |---|---|---|
@@ -15,15 +15,16 @@ Fases 0–7 implementadas e testadas localmente; fase 8 parcialmente (catálogo 
 | 5 Troca/financeiro | feito | troca unificada com compensação; exemplos A/B/C; pagar/receber, caixa, taxas, despesas; T-007…T-013, T-016, T-017 |
 | 6 Métricas/documentos | feito | dashboard, 13 relatórios, CSV, PDFs não fiscais (snapshot + hash), auditoria, onboarding; T-018 |
 | 7 SaaS + VPS | feito (sem deploy) | planos/limites, `/plataforma` (2FA), faturas manuais, webhook HMAC (T-022), Dockerfile, compose, backup + teste de restauração, CI |
-| 8 Catálogo/crescimento | parcial | catálogo público + pedido pendente (T-020) feitos; ordens de serviço, garantia, ajuda e indicação **pendentes** |
+| 8 Catálogo/crescimento | feito | catálogo público + pedido pendente (T-020), ordens de serviço, garantia com termo da época, central de ajuda (conteúdo próprio), indicação com recompensa manual auditada |
 | 9 Integrações | não iniciado | depende de gateway, fiscal e credenciais reais |
 
 ## Verificado de fato (comandos executados nesta sessão)
 - `pnpm lint` — limpo. `pnpm -r run typecheck` — limpo.
 - `pnpm test` — 28 testes unitários passando (dinheiro, rateio, troca, FIFO, parcelas, métricas, estados).
-- `pnpm test:int` — 48 testes de integração passando em PostgreSQL real (rodado 3× seguidas): isolamento/RLS (11), compra/venda/financeiro/devolução (18), troca (8), catálogo público (5), plataforma/webhook (6).
-- E2E Playwright (`tests/e2e/journey.spec.ts`, 7 etapas): cadastro → produtos → compra com IMEI → venda Pix → troca com diferença → crediário + recebimento parcial + devolução → relatório. Passando.
-- Visual (`tests/e2e/visual.spec.ts`): 5 telas × 4 larguras sem erro de console nem rolagem horizontal. `/plataforma` conferida em 1440 px e 390 px.
+- `pnpm test:int` — 55 testes de integração passando em PostgreSQL real (suíte completa repetida 4× sem falha intermitente): isolamento/RLS (11), compra/venda/financeiro/devolução (18), troca (8), catálogo público (5), plataforma/webhook/indicação (7), pós-venda/ajuda/indicação (6).
+- E2E Playwright (`tests/e2e/journey.spec.ts`, 9 etapas): cadastro → produtos → compra com IMEI → venda Pix → troca com diferença → crediário + recebimento parcial + devolução → relatório → ordem de serviço → central de ajuda. Passando.
+- Visual (`tests/e2e/visual.spec.ts`): 8 telas × 4 larguras sem erro de console nem rolagem horizontal. `/plataforma` conferida em 1440 px e 390 px (com 2FA TOTP real).
+- Seed de demonstração (`pnpm db:seed`): duas empresas fictícias; login do usuário demo e números do painel conferidos à mão (vendas R$ 3.917,70; CMV R$ 2.836,00; entradas de caixa R$ 2.737,90).
 - Docker: `docker build --target web|worker` OK (≈74 MB cada, conteúdo); `docker compose up` com Postgres 17.6: migração 0001–0009 aplicada pelo job, web `healthy`, venda + foto + PDF gerado pelo worker, FS somente leitura.
 - `infra/backup/backup.sh` + `infra/backup/restore-test.sh`: dump + arquivos + SHA256; restauração em banco temporário, contagens batem, RLS ativo, banco temporário removido.
 
@@ -45,7 +46,7 @@ pnpm test && pnpm test:int
 ```
 
 ## Próximos passos
-1. Fase 8 restante: ordens de serviço simples, casos de garantia (termo em PDF), central de ajuda com conteúdo próprio, indicação.
-2. Seed de demonstração (duas empresas fictícias) e README.
-3. Liberar acesso GitHub → push → acompanhar CI.
-4. Quando autorizado: inventário da VPS (`docs/RUNBOOK.md` §1) e plano de instalação — sem deploy antes disso.
+1. Liberar acesso do app GitHub ao repositório → push do branch → acompanhar o CI (`.github/workflows/ci.yml`).
+2. Quando autorizado: inventário da VPS (`docs/RUNBOOK.md` §1, via `prompts/03_PREPARAR_VPS.md`) e plano de instalação — sem deploy antes disso.
+3. Definir preços reais dos planos, provedor de e-mail (SMTP) e gateway de cobrança; ligar em sandbox e validar (fase 9).
+4. Referência BrikLucro: quando houver capturas da área interna, `prompts/04_ATUALIZAR_REFERENCIA_2.md`.

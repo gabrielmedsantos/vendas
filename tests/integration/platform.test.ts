@@ -2,7 +2,7 @@ import { createHmac, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  createProduct, platformCreateInvoice, platformMarkInvoicePaid, platformOverview, platformSetTenantStatus, processWebhookEvents,
+  applyBillingEvent, createProduct, getReferralInfo, platformReferrals, platformSetReferralStatus, provisionTenant, platformCreateInvoice, platformMarkInvoicePaid, platformOverview, platformSetTenantStatus, processWebhookEvents,
   receiveBillingWebhook, resolveActor, resolvePlatformAdmin, verifyWebhookSignature, zProduct, type PlatformAdmin,
 } from '@gct/app';
 import { closeDeps, createTenant, createUser, testDeps, type TenantFixture } from './helpers';
@@ -110,5 +110,23 @@ describe('T-022: webhook de cobrança duplicado ou fora de ordem', () => {
     await receiveBillingWebhook(deps, 'generic', failed, sign(failed), SECRET, 'sandbox');
     await processWebhookEvents(deps);
     expect((await sub(t.tenantId)).status).toBe('past_due');
+  });
+});
+
+describe('indicações na plataforma', () => {
+  it('só recompensa indicação qualificada; recompensa é auditada e encerra', async () => {
+    const referrer = await createTenant(deps, 'Loja Indicadora Plataforma');
+    const { code } = await getReferralInfo(deps, referrer.owner);
+    const u = await createUser(deps);
+    const { tenantId } = await provisionTenant(deps, u.id, { name: 'Loja Indicada Plataforma', referralCode: code });
+    const find = async () => (await platformReferrals(deps)).find((r) => r.referred_name === 'Loja Indicada Plataforma')!;
+    await expect(platformSetReferralStatus(deps, admin, (await find()).id, 'rewarded', 'Desconto')).rejects.toMatchObject({ code: 'validation_failed' });
+    await applyBillingEvent(deps, { type: 'invoice.paid', tenantId, periodStart: '2026-10-01', periodEnd: '2026-10-31', amountCents: '4900' }, `t:${randomUUID()}`);
+    expect((await find()).status).toBe('qualified');
+    await platformSetReferralStatus(deps, admin, (await find()).id, 'rewarded', '1 mês de desconto na próxima fatura');
+    expect((await find()).status).toBe('rewarded');
+    await expect(platformSetReferralStatus(deps, admin, (await find()).id, 'rejected', 'x x x')).rejects.toMatchObject({ code: 'conflict' });
+    const log = await deps.dbs.platform.selectFrom('platform_audit').select('action').where('tenant_id', '=', referrer.tenantId).execute();
+    expect(log.map((l) => l.action)).toContain('referral.rewarded');
   });
 });

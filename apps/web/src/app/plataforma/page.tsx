@@ -16,7 +16,44 @@ interface InvoiceRow { id: string; tenantId: string; tenantName: string; periodS
 interface AuditRow { id: string; adminUserId: string; action: string; tenantId: string | null; reason: string; createdAt: string }
 interface WebhookRow { id: string; provider: string; externalId: string; eventType: string; receivedAt: string; processedAt: string | null; result: string | null }
 
-type Tab = 'overview' | 'tenants' | 'plans' | 'invoices' | 'webhooks' | 'audit';
+interface ReferralRow { id: string; status: string; createdAt: string; referrerName: string; referredName: string }
+type Tab = 'overview' | 'tenants' | 'plans' | 'invoices' | 'referrals' | 'webhooks' | 'audit';
+const REFERRAL_LABEL: Record<string, string> = { pending: 'Aguardando pagamento', qualified: 'Qualificada', rewarded: 'Recompensada', rejected: 'Recusada' };
+
+function Referrals() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const list = useQuery({ queryKey: ['platform', 'referrals'], queryFn: () => api<ReferralRow[]>('platform/referrals') });
+  const [act, setAct] = useState<{ r: ReferralRow; to: 'rewarded' | 'rejected' } | null>(null);
+  return (
+    <Card title="Indicações" description="Qualificam automaticamente quando a empresa indicada paga a primeira mensalidade. A recompensa (ex.: desconto) é aplicada por você e registrada aqui.">
+      {list.isLoading ? <LoadingBlock /> : list.error ? <ErrorState error={list.error} /> : !list.data?.length ? <EmptyState title="Nenhuma indicação" /> : (
+        <Table>
+          <thead><tr><Th>Data</Th><Th>Indicou</Th><Th>Indicada</Th><Th>Situação</Th><Th /></tr></thead>
+          <tbody>{list.data.map((r) => (
+            <tr key={r.id}>
+              <Td>{dateBR(r.createdAt)}</Td><Td>{r.referrerName}</Td><Td>{r.referredName}</Td>
+              <Td><Badge tone={r.status === 'qualified' ? 'warning' : r.status === 'rewarded' ? 'success' : r.status === 'rejected' ? 'danger' : 'neutral'}>{REFERRAL_LABEL[r.status] ?? r.status}</Badge></Td>
+              <Td right>{(r.status === 'qualified' || r.status === 'pending') && (
+                <div className="flex justify-end gap-1">
+                  {r.status === 'qualified' && <Button size="sm" variant="secondary" onClick={() => setAct({ r, to: 'rewarded' })}>Registrar recompensa</Button>}
+                  <Button size="sm" variant="quiet" onClick={() => setAct({ r, to: 'rejected' })}>Recusar</Button>
+                </div>
+              )}</Td>
+            </tr>
+          ))}</tbody>
+        </Table>
+      )}
+      <ReasonModal open={!!act} onClose={() => setAct(null)} danger={act?.to === 'rejected'} title={act?.to === 'rewarded' ? 'Registrar recompensa' : 'Recusar indicação'} onConfirm={async (reason) => {
+        await api(`platform/referrals/${act!.r.id}/status`, { body: { status: act!.to, reason } });
+        toast('Indicação atualizada.');
+        await qc.invalidateQueries({ queryKey: ['platform', 'referrals'] });
+      }}>
+        {act?.to === 'rewarded' && <p className="text-sm text-muted">Descreva a recompensa concedida (ex.: 1 mês de desconto na fatura de novembro).</p>}
+      </ReasonModal>
+    </Card>
+  );
+}
 
 const tone = (s: string | null) => (s === 'active' ? 'success' : s === 'suspended' || s === 'canceled' ? 'danger' : s === 'past_due' ? 'warning' : 'neutral');
 
@@ -233,7 +270,7 @@ export default function PlatformPage() {
       <PageHeader title="Administração da plataforma" description="Empresas, planos e cobrança. Esta área não mostra vendas, clientes ou estoque das empresas." actions={<Link href="/app" className="text-sm text-primary-soft underline">Voltar ao sistema</Link>} />
       <Tabs value={tab} onChange={setTab} options={[
         { value: 'overview', label: 'Visão geral' }, { value: 'tenants', label: 'Empresas' }, { value: 'plans', label: 'Planos' },
-        { value: 'invoices', label: 'Faturas' }, { value: 'webhooks', label: 'Webhooks' }, { value: 'audit', label: 'Auditoria' },
+        { value: 'invoices', label: 'Faturas' }, { value: 'referrals', label: 'Indicações' }, { value: 'webhooks', label: 'Webhooks' }, { value: 'audit', label: 'Auditoria' },
       ]} />
       {tab === 'overview' && (overview.error ? <ErrorState error={overview.error} /> : !o ? <LoadingBlock /> : (
         <>
@@ -252,6 +289,7 @@ export default function PlatformPage() {
       {tab === 'tenants' && <Tenants plans={plans.data ?? []} />}
       {tab === 'plans' && (plans.isLoading ? <LoadingBlock /> : plans.error ? <ErrorState error={plans.error} /> : <Plans plans={plans.data ?? []} refetch={plans.refetch} />)}
       {tab === 'invoices' && <Invoices />}
+      {tab === 'referrals' && <Referrals />}
       {tab === 'webhooks' && (
         <Card title="Webhooks de cobrança" description="Eventos recebidos com assinatura válida. Repetidos são ignorados pelo identificador do provedor.">
           {hooks.isLoading ? <LoadingBlock /> : !hooks.data?.length ? <EmptyState title="Nenhum evento recebido" description="Integração de cobrança desligada até configurar BILLING_WEBHOOK_SECRET." /> : (
