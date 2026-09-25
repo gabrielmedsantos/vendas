@@ -45,7 +45,7 @@ Fases 0–8 implementadas e testadas localmente. **Nada foi implantado na VPS** 
 - Atualizar: trazer o código novo (git pull) e rodar `bash infra/vps/instalar.sh --dominio lucromax.alfamaxdigital.com.br`
   (mantém senhas, dados e a publicação no Traefik).
 - Pendente na VPS: confirmar agendamento do backup diário (a sessão caiu nessa pergunta) e cópia externa dos backups.
-- A cópia em `/srv/gct` está no commit d4fa06a + `infra/vps/traefik.sh` novo copiado à mão; o próximo `git pull` alinha.
+- A cópia em `/srv/gct` está no commit d4fa06a com alterações aplicadas por pacote (`git apply`), pois o GitHub ainda não está liberado: `traefik.sh` e o convite por link (commit 420a129). Para voltar a sincronizar pelo Git: `git checkout -- . && git clean -n` (conferir) e então `git pull`; `.env.production` e `compose.traefik.yaml` não são rastreados e ficam intactos.
 - Modelos de contrato (Word/PDF) em `docs/modelos/`: compra ou troca (do usuário), venda e termo de garantia de 3 meses.
 
 ## Testar localmente com Docker
