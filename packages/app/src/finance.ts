@@ -239,7 +239,8 @@ export async function recordSettlement(trx: Tx, ctx: FinCtx, input: SettlementIn
 
 /** Estorno de liquidação: nova linha vinculada; original permanece intacta. */
 export async function reverseSettlement(trx: Tx, ctx: FinCtx, settlementId: string, reason: string): Promise<string> {
-  const s = await trx.selectFrom('settlements').selectAll().where('id', '=', settlementId).forUpdate().executeTakeFirst();
+  // Livro append-only: unicidade de estorno garantida por índice único (reversal_of).
+  const s = await trx.selectFrom('settlements').selectAll().where('id', '=', settlementId).executeTakeFirst();
   if (!s) throw notFound('Liquidação');
   if (s.reversal_of) throw conflict('Não é possível estornar um estorno.');
   const already = await trx.selectFrom('settlements').select('id').where('reversal_of', '=', s.id).executeTakeFirst();
@@ -321,7 +322,7 @@ export async function applyOffset(
 }
 
 export async function reverseOffset(trx: Tx, ctx: FinCtx, offsetId: string): Promise<void> {
-  const o = await trx.selectFrom('offsets').selectAll().where('id', '=', offsetId).forUpdate().executeTakeFirst();
+  const o = await trx.selectFrom('offsets').selectAll().where('id', '=', offsetId).executeTakeFirst();
   if (!o) throw notFound('Compensação');
   const rev = await trx
     .insertInto('offsets')

@@ -10,6 +10,9 @@ export { migrate, MIGRATIONS_DIR } from './migrator';
 // int8 → BigInt (dinheiro em centavos); date → 'YYYY-MM-DD' (sem fuso implícito).
 pg.types.setTypeParser(20, (v) => BigInt(v));
 pg.types.setTypeParser(1082, (v) => v);
+// numeric: somas de bigint (sum) chegam como numeric. Inteiros → BigInt; frações
+// permanecem string para não perder precisão (divisões devem arredondar no SQL).
+pg.types.setTypeParser(1700, (v) => (/^-?\d+$/.test(v) ? BigInt(v) : v));
 
 export type Db = Kysely<DB>;
 export type Tx = Transaction<DB>;

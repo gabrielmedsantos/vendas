@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { nextNumber, type Tx } from '@gct/db';
 import { proportionalShare } from '@gct/domain';
@@ -52,14 +53,9 @@ export async function returnInTx(
   await assertPeriodOpen(trx, today);
   const loc = await defaultLocation(trx);
   const number = await nextNumber(trx, actor.tenantId, 'return');
-  const ret = await trx
-    .insertInto('returns')
-    .values({
-      tenant_id: actor.tenantId, number, sale_id: saleId, kind: opts.kind ?? 'return', reason: input.reason,
-      revenue_cents: 0n, cost_cents: 0n, created_by: actor.userId,
-    })
-    .returning('id')
-    .executeTakeFirstOrThrow();
+  // Registro de devolução é imutável: calcula tudo e insere uma única vez ao final.
+  const ret = { id: randomUUID() };
+  const itemRows: { sale_item_id: string; quantity: number; revenue_cents: bigint; cost_cents: bigint; unit_id: string | null; lot_id: string | null }[] = [];
 
   let revenue = 0n;
   let cost = 0n;
@@ -88,10 +84,7 @@ export async function returnInTx(
           variantId: si.variant_id, locationId: loc, quantity: take, costCents: c, bucket: 'inspection', lotSource: 'sale_return',
           kind: 'sale_return', sourceType: 'return', sourceId: ret.id, unitId: a.unit_id, reason: input.reason,
         });
-        await trx.insertInto('return_items').values({
-          tenant_id: actor.tenantId, return_id: ret.id, sale_item_id: si.id, quantity: take, revenue_cents: revenueRows === 0 ? itemRevenue : 0n,
-          cost_cents: c, unit_id: a.unit_id, lot_id: lotId,
-        }).execute();
+        itemRows.push({ sale_item_id: si.id, quantity: take, revenue_cents: revenueRows === 0 ? itemRevenue : 0n, cost_cents: c, unit_id: a.unit_id, lot_id: lotId });
         revenueRows++;
         itemCost += c;
         need -= take;
@@ -99,9 +92,7 @@ export async function returnInTx(
       if (need > 0) throw conflict('Alocações de custo insuficientes para a devolução.');
     }
     if (si.product_kind !== 'physical') {
-      await trx.insertInto('return_items').values({
-        tenant_id: actor.tenantId, return_id: ret.id, sale_item_id: si.id, quantity: qty, revenue_cents: itemRevenue, cost_cents: 0n,
-      }).execute();
+      itemRows.push({ sale_item_id: si.id, quantity: qty, revenue_cents: itemRevenue, cost_cents: 0n, unit_id: null, lot_id: null });
     }
     await trx
       .updateTable('sale_items')
@@ -159,10 +150,13 @@ export async function returnInTx(
     }
   }
   await trx
-    .updateTable('returns')
-    .set({ revenue_cents: revenue, cost_cents: cost, reduced_balance_cents: reduced, refund_cents: refund, store_credit_cents: credit, refund_title_id: refundTitleId })
-    .where('id', '=', ret.id)
+    .insertInto('returns')
+    .values({
+      id: ret.id, tenant_id: actor.tenantId, number, sale_id: saleId, kind: opts.kind ?? 'return', reason: input.reason, revenue_cents: revenue, cost_cents: cost,
+      reduced_balance_cents: reduced, refund_cents: refund, store_credit_cents: credit, refund_title_id: refundTitleId, created_by: actor.userId,
+    })
     .execute();
+  for (const row of itemRows) await trx.insertInto('return_items').values({ tenant_id: actor.tenantId, return_id: ret.id, ...row }).execute();
   const items = await trx.selectFrom('sale_items').select(['quantity', 'returned_qty']).where('sale_id', '=', saleId).execute();
   const fully = items.every((i) => i.returned_qty === i.quantity);
   await trx

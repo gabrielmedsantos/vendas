@@ -79,7 +79,7 @@ export async function simulateTrade(deps: AppDeps, actor: Actor, input: TradeInp
           cost += r.rows[0]?.c ?? 0n;
         } else {
           const r = await sql<{ c: bigint | null }>`
-            select case when sum(qty_remaining) > 0 then sum(cost_remaining_cents) * ${o.quantity} / sum(qty_remaining) end as c
+            select case when sum(qty_remaining) > 0 then round(sum(cost_remaining_cents) * ${o.quantity} / sum(qty_remaining))::bigint end as c
             from inventory_lots where variant_id = ${o.variantId} and status = 'available' and qty_remaining > 0 and unit_id is null`.execute(trx);
           cost += r.rows[0]?.c ?? 0n;
         }

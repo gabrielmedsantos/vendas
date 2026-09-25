@@ -276,7 +276,7 @@ export async function upsertUnitForEntry(trx: Tx, ctx: StockCtx, variantId: stri
       .select(['u.id', 'u.status', 'u.variant_id'])
       .where('ui.kind', '=', i.kind)
       .where('ui.normalized', '=', i.normalized)
-      .forUpdate()
+      .forUpdate('u')
       .executeTakeFirst();
     if (found) {
       if (existingUnit && existingUnit.id !== found.id) throw conflict('Identificadores pertencem a unidades diferentes.');
@@ -526,7 +526,7 @@ export async function confirmInventoryCount(deps: AppDeps, actor: Actor, id: str
       } else {
         // Sobra: entra ao custo médio atual disponível (ou zero sem base), documentado no motivo.
         const avg = await sql<{ c: bigint | null }>`
-          select case when sum(qty_remaining) > 0 then sum(cost_remaining_cents) / sum(qty_remaining) end as c
+          select case when sum(qty_remaining) > 0 then round(sum(cost_remaining_cents) / sum(qty_remaining))::bigint end as c
           from inventory_lots where variant_id = ${item.variant_id} and qty_remaining > 0 and status = 'available'`.execute(trx);
         const unit = avg.rows[0]?.c ?? 0n;
         await stockIn(trx, actor, {

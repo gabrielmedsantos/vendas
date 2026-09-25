@@ -62,7 +62,7 @@ async function currentUsage(trx: Tx, tenantId: string, key: LimitKey): Promise<n
       return Number(r.rows[0]!.n);
     }
     case 'storage_mb': {
-      const r = await sql<{ n: bigint }>`select coalesce(sum(size_bytes), 0) / 1048576 as n from attachments where tenant_id = ${tenantId}`.execute(trx);
+      const r = await sql<{ n: bigint }>`select (coalesce(sum(size_bytes), 0) / 1048576)::bigint as n from attachments where tenant_id = ${tenantId}`.execute(trx);
       return Number(r.rows[0]!.n);
     }
     case 'monthly_sales': {
