@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { jsonb, nextNumber, sql, type Tx } from '@gct/db';
 import { assertPaymentsCoverTotal, computeSaleTotals, discountExceedsLimit, type PaymentKind } from '@gct/domain';
-import { addDays, AppError, applyBps, conflict, forbidden, invalid, notFound, sumCents } from '@gct/shared';
+import { addDays, applyBps, conflict, forbidden, invalid, notFound } from '@gct/shared';
 import { audit, can, emit, idempotent, requirePermission, requireWritable, todayLocal, tx, type Actor, type AppDeps } from './core';
 import { checkLimit } from './billing';
 import { assertPeriodOpen, createInstallmentTitles, createTitle, recordSettlement, useStoreCredit, type SettlementMethod } from './finance';

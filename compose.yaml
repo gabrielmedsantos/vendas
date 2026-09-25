@@ -1,0 +1,123 @@
+# Produção/homologação na VPS. Uso (a partir da raiz do repositório):
+#   docker compose --env-file .env.production build
+#   docker compose --env-file .env.production up -d          # migrate roda antes de web/worker
+#   docker compose --env-file .env.production --profile caddy up -d   # só se NÃO houver proxy TLS na VPS
+# NUNCA: `docker compose down -v` (apaga banco e arquivos). Ver docs/RUNBOOK.md.
+name: gct
+
+x-app: &app
+  env_file: .env.production
+  init: true
+  restart: unless-stopped
+  read_only: true
+  tmpfs: [/tmp]
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  logging: &logging
+    driver: json-file
+    options: { max-size: "10m", max-file: "5" }
+  environment: &app-env
+    NODE_ENV: production
+    STORAGE_PATH: /data/storage
+    DATABASE_URL: postgres://gct_app:${GCT_APP_PASSWORD:?}@db:5432/${DB_NAME:-gct}
+    AUTH_DATABASE_URL: postgres://gct_auth:${GCT_AUTH_PASSWORD:?}@db:5432/${DB_NAME:-gct}
+    PLATFORM_DATABASE_URL: postgres://gct_platform:${GCT_PLATFORM_PASSWORD:?}@db:5432/${DB_NAME:-gct}
+    PUBLIC_DATABASE_URL: postgres://gct_public:${GCT_PUBLIC_PASSWORD:?}@db:5432/${DB_NAME:-gct}
+
+services:
+  db:
+    image: postgres:17.6-alpine@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94
+    restart: unless-stopped
+    shm_size: 256mb
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}
+      DB_NAME: ${DB_NAME:-gct}
+      GCT_OWNER_PASSWORD: ${GCT_OWNER_PASSWORD:?}
+      GCT_APP_PASSWORD: ${GCT_APP_PASSWORD:?}
+      GCT_AUTH_PASSWORD: ${GCT_AUTH_PASSWORD:?}
+      GCT_PLATFORM_PASSWORD: ${GCT_PLATFORM_PASSWORD:?}
+      GCT_PUBLIC_PASSWORD: ${GCT_PUBLIC_PASSWORD:?}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./infra/db/initdb:/docker-entrypoint-initdb.d:ro
+      - ./infra/db/roles.sql:/gct/roles.sql:ro
+    networks: [internal]
+    # sem `ports`: o banco não é publicado no host nem na Internet
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d $${DB_NAME} -q"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+  migrate:
+    image: gct-worker:${APP_VERSION:-local}
+    build: { context: ., target: worker }
+    command: ["node", "dist/migrate.js"]
+    env_file: .env.production
+    environment:
+      MIGRATION_DATABASE_URL: postgres://gct_owner:${GCT_OWNER_PASSWORD:?}@db:5432/${DB_NAME:-gct}
+    depends_on:
+      db: { condition: service_healthy }
+    networks: [internal]
+    restart: "no"
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    logging: *logging
+
+  web:
+    <<: *app
+    image: gct-web:${APP_VERSION:-local}
+    build: { context: ., target: web }
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    volumes:
+      - app-storage:/data/storage
+    networks: [internal, edge]
+    ports:
+      # Publicado só no loopback: o proxy TLS existente (Nginx/Traefik/Caddy) encaminha para cá.
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/readyz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  worker:
+    <<: *app
+    image: gct-worker:${APP_VERSION:-local}
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    volumes:
+      - app-storage:/data/storage
+    # edge: saída para SMTP/gateway quando configurados
+    networks: [internal, edge]
+    stop_grace_period: 20s
+
+  caddy:
+    profiles: [caddy]
+    image: caddy:2.10-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?defina APP_DOMAIN para usar o Caddy}
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [edge]
+    depends_on: [web]
+    logging: *logging
+
+networks:
+  internal:
+    internal: true
+  edge: {}
+
+volumes:
+  db-data:
+  app-storage:
+  caddy-data:
+  caddy-config:

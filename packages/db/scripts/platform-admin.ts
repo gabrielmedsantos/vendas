@@ -23,6 +23,9 @@ try {
     await client.query('insert into platform_admins (user_id, role) values ($1, $2) on conflict (user_id) do update set role = excluded.role', [u.rows[0].id, mode]);
     console.log(`Acesso concedido (${mode}). O usuário precisa ter 2FA ativo para entrar em /plataforma.`);
   }
+} catch (e) {
+  console.error((e as Error).message);
+  process.exitCode = 1;
 } finally {
   await client.end();
 }

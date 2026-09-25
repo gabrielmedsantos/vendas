@@ -35,7 +35,6 @@ export function ProductPhotos({ productId, images, canManage }: { productId: str
         <ul className="grid grid-cols-3 gap-3 sm:grid-cols-5">
           {images.map((i) => (
             <li key={i.attachmentId} className="group relative aspect-square overflow-hidden rounded-xl border border-line bg-bg">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={`/api/v1/attachments/${i.attachmentId}`} alt="Foto do produto" className="size-full object-cover" loading="lazy" />
               {canManage && <button aria-label="Remover foto" onClick={async () => { await api(`products/${productId}/images/${i.attachmentId}`, { method: 'DELETE' }); qc.invalidateQueries({ queryKey: ['product', productId] }); }} className="absolute right-1 top-1 rounded-lg bg-black/60 p-1 text-white opacity-0 transition group-hover:opacity-100 focus:opacity-100"><Trash2 className="size-3.5" /></button>}
             </li>

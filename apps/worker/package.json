@@ -5,7 +5,22 @@
   "type": "module",
   "scripts": {
     "start": "tsx src/index.ts",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "node build.mjs",
+    "start:prod": "node --enable-source-maps dist/worker.js"
   },
-  "dependencies": { "@gct/app": "workspace:*", "@gct/db": "workspace:*", "@gct/shared": "workspace:*" }
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "@gct/app": "workspace:*",
+    "@gct/db": "workspace:*",
+    "@gct/shared": "workspace:*"
+  },
+  "dependencies": {
+    "kysely": "0.29.6",
+    "pdfkit": "0.20.2",
+    "pg": "8.23.0",
+    "sharp": "0.35.4",
+    "zod": "4.6.5"
+  },
+  "description": "Worker. Pacotes @gct/* entram no bundle (devDependencies); dependencies = externos do bundle."
 }

@@ -60,7 +60,7 @@ export function formatBRL(value: Cents | string, opts: { sign?: boolean } = {}):
   const reais = abs / 100n;
   const cents = abs % 100n;
   const intStr = reais.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  const body = `R$ ${intStr},${cents.toString().padStart(2, '0')}`;
+  const body = `R$\u00a0${intStr},${cents.toString().padStart(2, '0')}`;
   if (neg) return `-${body}`;
   return opts.sign && v > 0n ? `+${body}` : body;
 }

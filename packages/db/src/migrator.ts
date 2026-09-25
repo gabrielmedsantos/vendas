@@ -47,7 +47,7 @@ export async function migrate(connectionString: string, dir = MIGRATIONS_DIR, lo
         await client.query('commit');
       } catch (e) {
         await client.query('rollback');
-        throw new Error(`Falha em ${file}: ${(e as Error).message}`);
+        throw new Error(`Falha em ${file}: ${(e as Error).message}`, { cause: e });
       }
       result.applied.push(file);
     }

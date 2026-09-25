@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        # Mesma versão do compose de produção
+        image: postgres:17.6-alpine@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TEST_ADMIN_URL: postgres://postgres:postgres@localhost:5432/postgres
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22.22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm -r --parallel run typecheck
+      - name: Testes unitários
+        run: pnpm test
+      - name: Testes de integração (PostgreSQL real, RLS, concorrência)
+        run: pnpm test:int
+      - name: Migrações aplicam do zero e são idempotentes
+        run: |
+          psql "$TEST_ADMIN_URL" -qc 'drop database if exists gct_test_ci with (force)'
+          ADMIN_URL="$TEST_ADMIN_URL" DB_NAME=gct_test_ci infra/db/setup-local.sh
+          MIGRATION_DATABASE_URL=postgres://gct_owner:dev_owner@localhost:5432/gct_test_ci pnpm db:migrate
+          MIGRATION_DATABASE_URL=postgres://gct_owner:dev_owner@localhost:5432/gct_test_ci pnpm db:migrate | grep 'aplicadas: 0'
+      - name: Build web e worker
+        run: pnpm --filter @gct/web build && pnpm --filter @gct/worker build
+      - name: Nenhum segredo versionado
+        run: |
+          ! git ls-files | grep -E '(^|/)\.env($|\.)' | grep -vE '\.env(\.production)?\.example$'
+          ! git grep -nIE '(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|AKIA[0-9A-Z]{16}|sk_live_[0-9a-zA-Z]{10,})'
+
+  images:
+    runs-on: ubuntu-24.04
+    needs: check
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - name: Build das imagens (sem publicar)
+        run: |
+          docker buildx build --target web -t gct-web:${{ github.sha }} --load .
+          docker buildx build --target worker -t gct-worker:${{ github.sha }} --load .
+      - name: Stack sobe e responde (compose com segredos efêmeros)
+        run: |
+          umask 077
+          sed -e "s/^APP_VERSION=.*/APP_VERSION=${{ github.sha }}/" -e "s#^APP_URL=.*#APP_URL=http://localhost:3000#" -e "s/^BILLING_ENVIRONMENT=.*/BILLING_ENVIRONMENT=sandbox/" .env.production.example \
+            | while IFS= read -r l; do case "$l" in *PASSWORD=|AUTH_SECRET=) echo "$l$(openssl rand -hex 24)";; *) echo "$l";; esac; done > .env.production
+          docker compose --env-file .env.production up -d --no-build --wait --wait-timeout 180 web worker
+          curl -fsS http://localhost:3000/readyz
+          docker compose --env-file .env.production logs migrate | grep 'migrações aplicadas'
+      - name: Encerrar (runner efêmero)
+        if: always()
+        run: docker compose --env-file .env.production down || true

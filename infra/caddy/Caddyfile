@@ -1,0 +1,11 @@
+# Usado só com `--profile caddy` (VPS sem proxy TLS). Certificado automático.
+{$APP_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy web:3000 {
+		header_up X-Real-IP {remote_host}
+	}
+	log {
+		output stdout
+		format json
+	}
+}

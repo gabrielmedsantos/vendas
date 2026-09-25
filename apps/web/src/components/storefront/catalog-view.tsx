@@ -35,7 +35,7 @@ export function CatalogView({ data, preview, onEvent, onOrder }: { data: PublicC
           <article key={i.variantId} className="flex flex-col overflow-hidden rounded-2xl border border-line bg-surface" onMouseEnter={() => onEvent?.('product_view', i.variantId)}>
             <div className="grid aspect-square place-items-center bg-surface-2">
               {i.imageIds[0] && !preview
-                ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={`/api/public/catalog/${data.slug}/images/${i.imageIds[0]}`} alt={i.name} className="size-full object-cover" loading="lazy" />
+                ? <img src={`/api/public/catalog/${data.slug}/images/${i.imageIds[0]}`} alt={i.name} className="size-full object-cover" loading="lazy" />
                 : <Package className="size-8 text-muted" aria-hidden />}
             </div>
             <div className="flex flex-1 flex-col gap-1 p-3">
