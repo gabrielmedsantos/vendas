@@ -1,0 +1,14 @@
+node_modules/
+.next/
+dist/
+coverage/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+/storage/
+/test-results/
+/playwright-report/
+/tests/e2e/.auth/
+/tests/screenshots/output/
+*.log

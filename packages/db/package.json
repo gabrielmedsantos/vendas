@@ -1,0 +1,23 @@
+{
+  "name": "@gct/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "migrate": "tsx scripts/migrate.ts",
+    "seed": "tsx scripts/seed.ts",
+    "codegen": "tsx scripts/codegen.ts"
+  },
+  "dependencies": {
+    "@gct/shared": "workspace:*",
+    "kysely": "0.29.6",
+    "pg": "8.23.0"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1",
+    "kysely-codegen": "0.20.0"
+  }
+}
