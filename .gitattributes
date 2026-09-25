@@ -1,0 +1,9 @@
+# Arquivos executados dentro de containers Linux precisam de LF, mesmo em clones no Windows.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.png binary
+*.webp binary
+*.jpg binary
+*.pdf binary
+*.zip binary
+referencias/** -text
