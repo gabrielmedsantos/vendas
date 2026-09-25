@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/client/api';
 import { Select } from '@/components/ui';
+import { CONDITION_LABEL } from '@/lib/client/format';
 
 interface Unit { id: string; internalCode: string; condition: string | null; batteryHealthPct: number | null; identifiers: { kind: string; value: string }[]; costCents?: string | null }
 
@@ -21,7 +22,7 @@ export function UnitPicker({ variantId, value, onChange, exclude = [] }: { varia
       <option value="">{q.isLoading ? 'Carregando…' : units.length ? 'Escolha a unidade (IMEI/série)' : 'Nenhuma unidade disponível'}</option>
       {units.map((u) => (
         <option key={u.id} value={u.id}>
-          {u.internalCode} · {u.identifiers.map((i) => i.value).join(' / ') || 'sem identificador'}{u.condition ? ` · ${u.condition}` : ''}
+          {u.internalCode} · {u.identifiers.map((i) => i.value).join(' / ') || 'sem identificador'}{u.condition ? ` · ${CONDITION_LABEL[u.condition] ?? u.condition}` : ''}
         </option>
       ))}
     </Select>

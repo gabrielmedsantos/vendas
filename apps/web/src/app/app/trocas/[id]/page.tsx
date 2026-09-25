@@ -10,7 +10,7 @@ import { DocLinks } from '@/components/docs/doc-links';
 import { Badge, Button, Card, ErrorState, Field, FormError, Input, LoadingBlock, Modal, PageHeader, Table, Td, Th } from '@/components/ui';
 import { useToast } from '@/components/toast';
 import { api, newKey } from '@/lib/client/api';
-import { brl, dateBR, dateTimeBR, KIND_LABEL, STATUS_LABEL } from '@/lib/client/format';
+import { brl, dateBR, dateTimeBR, KIND_LABEL, STATUS_LABEL, CONDITION_LABEL } from '@/lib/client/format';
 import { useCan } from '@/lib/client/session';
 
 interface Detail {
@@ -69,7 +69,7 @@ export default function TradeDetail() {
             <ul className="flex flex-col gap-2">{incoming.map((i) => (
               <li key={i.id} className="rounded-xl border border-line bg-bg p-3 text-sm">
                 <div className="flex justify-between gap-2"><span className="font-medium">{i.description}{i.internalCode ? ` · ${i.internalCode}` : ''}</span><span className="tabular">{brl(i.agreedCents)}</span></div>
-                <p className="text-xs text-muted">{i.identifiers.map((x) => `${x.kind.toUpperCase()}: ${x.value}`).join(' · ') || 'sem identificador'} · {i.condition ?? 'condição não informada'} · destino: {i.destination === 'inspection' ? 'inspeção' : 'disponível'}{i.unitStatus ? ` · agora: ${STATUS_LABEL[i.unitStatus]}` : ''}</p>
+                <p className="text-xs text-muted">{i.identifiers.map((x) => `${x.kind.toUpperCase()}: ${x.value}`).join(' · ') || 'sem identificador'} · {i.condition ? CONDITION_LABEL[i.condition] ?? i.condition : 'condição não informada'} · destino: {i.destination === 'inspection' ? 'inspeção' : 'disponível'}{i.unitStatus ? ` · agora: ${STATUS_LABEL[i.unitStatus]}` : ''}</p>
                 {i.estimatedExtraCostCents !== '0' && <p className="text-xs text-muted">Custo previsto (não realizado): {brl(i.estimatedExtraCostCents)}{i.suggestedPriceCents ? ` · preço sugerido ${brl(i.suggestedPriceCents)}` : ''}</p>}
               </li>
             ))}</ul>

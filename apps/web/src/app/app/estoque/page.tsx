@@ -7,7 +7,7 @@ import { useAccounts } from '@/components/ops/hooks';
 import { Button, Card, EmptyState, ErrorState, Field, FormError, Input, LoadingBlock, Modal, MoneyInput, PageHeader, Pager, Select, Table, Tabs, Td, Th } from '@/components/ui';
 import { useToast } from '@/components/toast';
 import { api, newKey, qs } from '@/lib/client/api';
-import { brl, dateBR, dateTimeBR, KIND_LABEL } from '@/lib/client/format';
+import { brl, dateBR, dateTimeBR, KIND_LABEL, CONDITION_LABEL } from '@/lib/client/format';
 import { useCan } from '@/lib/client/session';
 
 interface Movement { id: string; createdAt: string; direction: string; kind: string; bucket: string; quantity: number; physicalAfter: number; reason: string | null; name: string; sku: string; internalCode: string | null; costCents?: string; sourceType: string }
@@ -57,7 +57,7 @@ function Inspection() {
         <Table>
           <thead><tr><Th>Entrada</Th><Th>Item</Th><Th>Origem</Th><Th>Condição</Th>{q.data[0]?.costRemainingCents !== undefined && <Th right>Custo</Th>}<Th right>Qtd</Th><Th /></tr></thead>
           <tbody>{q.data.map((i) => (
-            <tr key={i.lotId}><Td>{dateBR(i.receivedAt)}</Td><Td>{i.name}<div className="text-xs text-muted">{i.sku}{i.internalCode ? ` · ${i.internalCode}` : ''}</div></Td><Td>{KIND_LABEL[i.sourceType] ?? i.sourceType}</Td><Td className="text-xs">{i.condition ?? '—'}{i.defects ? <div className="text-muted">{i.defects}</div> : null}</Td>{i.costRemainingCents !== undefined && <Td right>{brl(i.costRemainingCents)}</Td>}<Td right>{i.qtyRemaining}</Td>
+            <tr key={i.lotId}><Td>{dateBR(i.receivedAt)}</Td><Td>{i.name}<div className="text-xs text-muted">{i.sku}{i.internalCode ? ` · ${i.internalCode}` : ''}</div></Td><Td>{KIND_LABEL[i.sourceType] ?? i.sourceType}</Td><Td className="text-xs">{(i.condition ? CONDITION_LABEL[i.condition] ?? i.condition : '—')}{i.defects ? <div className="text-muted">{i.defects}</div> : null}</Td>{i.costRemainingCents !== undefined && <Td right>{brl(i.costRemainingCents)}</Td>}<Td right>{i.qtyRemaining}</Td>
               <Td right><span className="flex justify-end gap-2">
                 {can('purchases.manage') && <Button size="sm" variant="secondary" onClick={() => { setRepair(i); setForm({ description: '', amount: '', payNow: false, accountId: accounts.data?.[0]?.id ?? '' }); }}><Wrench className="size-3.5" />Custo de preparo</Button>}
                 <Button size="sm" onClick={async () => { try { await api(`inventory/inspection/${i.lotId}/release`, { body: {} }); qc.invalidateQueries(); toast('Liberado para venda.'); } catch (e) { alert((e as Error).message); } }}>Liberar</Button>

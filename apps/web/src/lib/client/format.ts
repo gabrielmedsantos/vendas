@@ -22,3 +22,5 @@ export const KIND_LABEL: Record<string, string> = {
   loss: 'Perda', supplier_return: 'Devolução ao fornecedor', inspection_release: 'Liberação de inspeção', reversal: 'Estorno',
   settlement: 'Liquidação', transfer_in: 'Transferência (entrada)', transfer_out: 'Transferência (saída)', opening: 'Saldo inicial', capital_in: 'Aporte', withdrawal: 'Retirada', loan_in: 'Empréstimo recebido', loan_out: 'Pagamento de empréstimo', cash_adjustment: 'Ajuste de caixa',
 };
+
+export const CONDITION_LABEL: Record<string, string> = { new: 'Novo', used: 'Usado', refurbished: 'Recondicionado', defective: 'Com defeito' };

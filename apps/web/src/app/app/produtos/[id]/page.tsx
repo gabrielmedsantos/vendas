@@ -11,7 +11,7 @@ import { ProductForm, toApi, type ProductFormValue } from '@/components/products
 import { Badge, Button, Card, ErrorState, LinkButton, LoadingBlock, PageHeader, Table, Tabs, Td, Th } from '@/components/ui';
 import { useToast } from '@/components/toast';
 import { api } from '@/lib/client/api';
-import { brl, dateBR, dateTimeBR, KIND_LABEL, STATUS_LABEL } from '@/lib/client/format';
+import { brl, dateBR, dateTimeBR, KIND_LABEL, STATUS_LABEL, CONDITION_LABEL } from '@/lib/client/format';
 import { useCan } from '@/lib/client/session';
 
 interface Product {
@@ -75,7 +75,7 @@ export default function ProductPage() {
                 <Table>
                   <thead><tr><Th>Código</Th><Th>Identificadores</Th><Th>Condição</Th><Th>Situação</Th>{p.canSeeCost && <Th right>Custo</Th>}<Th>Entrada</Th></tr></thead>
                   <tbody>{p.units.map((u) => (
-                    <tr key={u.id}><Td>{u.internalCode}</Td><Td className="text-xs">{u.identifiers.map((i) => `${i.kind.toUpperCase()}: ${i.value}`).join(' · ') || '—'}</Td><Td>{u.condition ?? '—'}{u.batteryHealthPct !== null && ` · bateria ${u.batteryHealthPct}%`}</Td><Td><Badge tone={u.status === 'available' ? 'success' : u.status === 'inspection' ? 'info' : 'neutral'}>{STATUS_LABEL[u.status]}</Badge></Td>{p.canSeeCost && <Td right>{brl(u.costCents)}</Td>}<Td>{dateBR(u.createdAt)}</Td></tr>
+                    <tr key={u.id}><Td>{u.internalCode}</Td><Td className="text-xs">{u.identifiers.map((i) => `${i.kind.toUpperCase()}: ${i.value}`).join(' · ') || '—'}</Td><Td>{(u.condition ? CONDITION_LABEL[u.condition] ?? u.condition : '—')}{u.batteryHealthPct !== null && ` · bateria ${u.batteryHealthPct}%`}</Td><Td><Badge tone={u.status === 'available' ? 'success' : u.status === 'inspection' ? 'info' : 'neutral'}>{STATUS_LABEL[u.status]}</Badge></Td>{p.canSeeCost && <Td right>{brl(u.costCents)}</Td>}<Td>{dateBR(u.createdAt)}</Td></tr>
                   ))}</tbody>
                 </Table>
               )}
