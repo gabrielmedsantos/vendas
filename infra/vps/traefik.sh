@@ -11,7 +11,7 @@ while [ $# -gt 0 ]; do case "$1" in --dominio) DOMINIO="${2:-}"; shift 2;; --sim
 PROJ="${COMPOSE_PROJECT_NAME:-gct}"
 erro() { printf '\n\033[31mERRO:\033[0m %s\n' "$*"; exit 1; }
 
-TR=$(docker ps --format '{{.Names}} {{.Image}}' | awk 'tolower($2) ~ /traefik/ {print $1; exit}' || true)
+TR=$(docker ps --format '{{.Names}} {{.Image}}' | awk 'tolower($2) ~ /(^|\/)traefik(:|@|$)/ {print $1; exit}' || true)
 [ -n "$TR" ] || erro "Nenhum container do Traefik rodando."
 echo "Traefik encontrado: $TR"
 ARGS=$(docker inspect "$TR" --format '{{range .Config.Cmd}}{{println .}}{{end}}{{range .Args}}{{println .}}{{end}}')

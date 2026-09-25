@@ -73,7 +73,7 @@ echo; echo "== 2. Plano =="
 PROJ="${COMPOSE_PROJECT_NAME:-gct}"
 NOSSO_CADDY=0; docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "${PROJ}-caddy-1" && NOSSO_CADDY=1
 if [ $NOSSO_CADDY = 1 ] || { [ $P80 = 0 ] && [ $P443 = 0 ]; }; then MODO=caddy; echo "  HTTPS pelo Caddy do projeto (certificado automático para $DOMINIO)."
-elif TRAEFIK=$(docker ps --format '{{.Names}} {{.Image}}' 2>/dev/null | awk 'tolower($2) ~ /traefik/ {print $1; exit}') && [ -n "$TRAEFIK" ]; then
+elif TRAEFIK=$(docker ps --format '{{.Names}} {{.Image}}' 2>/dev/null | awk 'tolower($2) ~ /(^|\/)traefik(:|@|$)/ {print $1; exit}') && [ -n "$TRAEFIK" ]; then
   MODO=traefik; echo "  As portas 80/443 são do Traefik ($TRAEFIK): o sistema será publicado por ele, com rótulos só no container novo (o Traefik e os outros sites não são alterados)."
 else MODO=externo; echo "  Já existe algo nas portas 80/443: o app fica em 127.0.0.1:${PORTA_APP} e você liga o proxy existente (nada será alterado nele)."; fi
 echo "  Banco PostgreSQL próprio, sem porta pública. Dados em volumes Docker (${PROJ}_db-data, ${PROJ}_app-storage)."
