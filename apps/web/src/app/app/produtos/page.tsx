@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
-import { Package, Plus, Search } from 'lucide-react';
+import { ImageOff, Package, Plus, Search } from 'lucide-react';
 import { useDebounced } from '@/components/ops/hooks';
 import { useCategories } from '@/components/ops/hooks';
 import { Badge, Card, EmptyState, ErrorState, Input, LinkButton, LoadingBlock, PageHeader, Pager, Select, Stat, Table, Td, Th, cx } from '@/components/ui';
@@ -14,7 +14,7 @@ import { useCan } from '@/lib/client/session';
 
 interface Row {
   id: string; name: string; brand: string | null; kind: string; tracking: string; status: string; categoryName: string | null; sku: string; variantCount: number;
-  retailPriceCents: string; wholesalePriceCents: string | null; onHand: number; reserved: number; inspection: number; minStock: number; unitCostCents?: string | null; marginBps?: number | null; stockCostCents?: string | null;
+  retailPriceCents: string; wholesalePriceCents: string | null; onHand: number; reserved: number; inspection: number; minStock: number; imageId: string | null; unitCostCents?: string | null; marginBps?: number | null; stockCostCents?: string | null;
 }
 interface Resp { data: Row[]; meta: { cursor: string | null; hasMore: boolean; total: number }; summary: { itemsInStock: number; productsInStock: number; potentialSaleCents: string; stockCostCents?: string; potentialMarginCents?: string } }
 
@@ -102,8 +102,17 @@ function Products() {
                   {list.data.data.map((r) => (
                     <tr key={r.id} className="hover:bg-surface-2">
                       <Td>
-                        <Link href={`/app/produtos/${r.id}`} className="font-medium hover:text-primary-soft">{r.name}</Link>
-                        <div className="text-xs text-muted">{r.sku}{r.variantCount > 1 ? ` · ${r.variantCount} variações` : ''}{r.tracking === 'serialized' ? ' · por unidade' : ''}{r.kind === 'service' ? ' · serviço' : ''}</div>
+                        <div className="flex items-center gap-3">
+                          <Link href={`/app/produtos/${r.id}`} tabIndex={-1} aria-hidden className="size-11 shrink-0 overflow-hidden rounded-lg border border-line bg-bg">
+                            {r.imageId
+                              ? <img src={`/api/v1/attachments/${r.imageId}`} alt="" className="size-full object-cover" loading="lazy" />
+                              : <span className="flex size-full items-center justify-center text-muted"><ImageOff className="size-4" /></span>}
+                          </Link>
+                          <div className="min-w-0">
+                            <Link href={`/app/produtos/${r.id}`} className="font-medium hover:text-primary-soft">{r.name}</Link>
+                            <div className="text-xs text-muted">{r.sku}{r.variantCount > 1 ? ` · ${r.variantCount} variações` : ''}{r.tracking === 'serialized' ? ' · por unidade' : ''}{r.kind === 'service' ? ' · serviço' : ''}</div>
+                          </div>
+                        </div>
                       </Td>
                       <Td className="text-muted">{r.categoryName ?? '—'}</Td>
                       {showCost && <Td right>{brl(r.unitCostCents)}</Td>}
