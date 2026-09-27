@@ -17,3 +17,6 @@ coverage/
 # Gerados na VPS
 compose.traefik.yaml
 infra/vps/gerado/
+
+# estado da atualização automática na VPS
+.deploy/
