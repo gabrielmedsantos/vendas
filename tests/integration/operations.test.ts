@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { sql, withTenant } from '@gct/db';
 import {
-  approvePurchase, cancelPurchase, cancelSale, confirmSale, createPurchaseDraft, getMetrics, getSale, listSales, processOutboxBatch, receivePurchase,
+  approvePurchase, cancelPurchase, listPurchases, zPurchaseList, cancelSale, confirmSale, createPurchaseDraft, getMetrics, getSale, listSales, processOutboxBatch, receivePurchase,
   returnSale, reverseSettlementAction, settleTitles, adjustStock, createExpense, recordCashMovement, transferBetweenAccounts, checkLimit,
   zSale, zPurchase, zReceive, zAdjustment, zExpense, retryDocument, readDocumentPdf, zSaleList,
   type Actor,
@@ -61,6 +61,24 @@ describe('compras e recebimento', () => {
     const final = await withTenant(deps.dbs.app, actor, (trx) => trx.selectFrom('purchase_items').select(['received_cost_cents']).where('id', '=', items[0]!.id).executeTakeFirstOrThrow());
     expect(final.received_cost_cents).toBe(11000n);
     expect(await reconcile(deps, actor)).toEqual([]);
+  });
+
+  it('lista de compras traz 1º item, quantidade de itens e foto do primeiro produto com foto', async () => {
+    const semFoto = await makeProduct(deps, actor, { name: 'Capa Demo Sem Foto' });
+    const comFoto = await makeProduct(deps, actor, { name: 'Fone Demo Com Foto' });
+    const img = await withTenant(deps.dbs.app, actor, async (trx) => {
+      const pid = (await sql<{ product_id: string }>`select product_id from product_variants where id = ${comFoto.variantId}`.execute(trx)).rows[0]!.product_id;
+      const a = (await sql<{ id: string }>`insert into attachments (tenant_id, storage_key, mime, size_bytes, sha256, owner_type, owner_id)
+        values (${actor.tenantId}, ${`teste/${randomUUID()}`}, 'image/png', 10, 'x', 'product', ${pid}) returning id`.execute(trx)).rows[0]!.id;
+      await sql`insert into product_images (tenant_id, product_id, attachment_id) values (${actor.tenantId}, ${pid}, ${a})`.execute(trx);
+      return a;
+    });
+    const d = await createPurchaseDraft(deps, actor, zPurchase.parse({ supplierId: supplier, purchaseDate: todayIn(actor), items: [
+      { variantId: semFoto.variantId, quantity: 1, unitCostCents: '100' }, { variantId: comFoto.variantId, quantity: 2, unitCostCents: '200' },
+    ], paymentTerms: { mode: 'due', dueDate: todayIn(actor) } }));
+    const page = await listPurchases(deps, actor, zPurchaseList.parse({ status: 'draft' }));
+    const row = page.data.find((r) => r.id === d.id)!;
+    expect(row).toMatchObject({ item_count: 2, first_item: expect.stringContaining('Capa Demo Sem Foto'), image_id: img });
   });
 
   it('cancelar rascunho não cria movimentações', async () => {

@@ -385,6 +385,13 @@ export async function listPurchases(deps: AppDeps, actor: Actor, q: z.infer<type
         'p.id', 'p.number', 'p.status', 'p.origin', 'p.purchase_date', 's.name as supplier_name', 'p.created_at',
         ...(showCost ? (['p.total_cents'] as const) : []),
         sql<number>`(select coalesce(sum(quantity - received_qty), 0) from purchase_items i where i.purchase_id = p.id)::int`.as('pending_qty'),
+        sql<number>`(select count(*) from purchase_items i where i.purchase_id = p.id)::int`.as('item_count'),
+        sql<string | null>`(select i.description from purchase_items i where i.purchase_id = p.id order by i.position limit 1)`.as('first_item'),
+        // Foto do primeiro item que tiver imagem (miniatura da lista).
+        sql<string | null>`(select pi.attachment_id from purchase_items i
+            join product_variants v on v.id = i.variant_id
+            join product_images pi on pi.product_id = v.product_id
+          where i.purchase_id = p.id order by i.position, pi.position limit 1)`.as('image_id'),
       ]);
     if (q.status !== 'all') query = query.where('p.status', '=', q.status);
     if (q.q) query = query.where('s.name', 'ilike', `%${q.q.replace(/[%_]/g, '')}%`);

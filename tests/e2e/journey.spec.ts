@@ -80,6 +80,11 @@ test.describe.serial('jornada completa', () => {
     await page.getByRole('button', { name: 'Confirmar compra e receber tudo' }).click();
     await expect(page.getByRole('heading', { name: /Compra #/ })).toBeVisible();
     await expect(page.getByText('Recebida').first()).toBeVisible();
+    // Lista de compras mostra o 1º item (com miniatura) e quantos itens a mais.
+    await page.goto('/app/compras');
+    const linha = page.getByRole('row').filter({ hasText: 'Distribuidora Demo' }).first();
+    await expect(linha.getByText(/Celular Demo/)).toBeVisible();
+    await expect(linha.getByText('+1 item')).toBeVisible();
   });
 
   test('venda simples com Pix', async () => {
