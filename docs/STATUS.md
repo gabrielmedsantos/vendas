@@ -42,10 +42,15 @@ Fases 0–8 implementadas e testadas localmente. **Nada foi implantado na VPS** 
 - Segredos só em `/srv/gct/.env.production` (0600). Nunca commitar.
 - Comandos na VPS (em `/srv/gct`): `docker compose --env-file .env.production -f compose.yaml -f compose.traefik.yaml ps|logs|up -d`.
   Nunca `down -v`, nunca mexer no Traefik nem nos containers de outros sistemas.
-- Atualizar: trazer o código novo (git pull) e rodar `bash infra/vps/instalar.sh --dominio lucromax.alfamaxdigital.com.br`
-  (mantém senhas, dados e a publicação no Traefik).
-- Pendente na VPS: confirmar agendamento do backup diário (a sessão caiu nessa pergunta) e cópia externa dos backups.
-- A cópia em `/srv/gct` está no commit d4fa06a com alterações aplicadas por pacote (`git apply`), pois o GitHub ainda não está liberado: `traefik.sh` e o convite por link (commit 420a129). Para voltar a sincronizar pelo Git: `git checkout -- . && git clean -n` (conferir) e então `git pull`; `.env.production` e `compose.traefik.yaml` não são rastreados e ficam intactos.
+- **Atualização automática (GitHub → VPS):** repositório `github.com/gabrielmedsantos/vendas`, branch `claude/new-session-z10cuu`.
+  Ativar uma vez na VPS (root): `curl -fsSL https://raw.githubusercontent.com/gabrielmedsantos/vendas/claude/new-session-z10cuu/infra/vps/ativar-auto.sh | bash`.
+  Isso aponta `/srv/gct` para o GitHub, instala `gct-atualizar.timer` (a cada 2 min), agenda o backup diário (03:17, `/srv/gct-backups`) e faz a primeira atualização.
+  A cada commit novo, `infra/vps/auto-atualizar.sh` faz: backup → código novo → build com imagens marcadas pelo commit (`APP_VERSION`) → `up -d --wait`.
+  Build falhou: versão no ar mantida. Subida falhou: rollback automático para a versão anterior. Commit que falhou não é tentado de novo; o próximo commit é.
+  Log: `/var/log/gct-atualizar.log`; estado em `/srv/gct/.deploy/`. Desligar: `systemctl disable --now gct-atualizar.timer`.
+  Testado em réplica local com docker simulado (sucesso, sem novidade, rollback, build quebrado, correção seguinte). Ativação na VPS real: pendente de o usuário rodar o comando.
+- Repositório GitHub está **público**: recomendado torná-lo privado; nesse caso a VPS precisa de uma deploy key (somente leitura) para o `git fetch`.
+- Pendente: cópia externa dos backups; remover a chave `claude-sessao-gct` de `/root/.ssh/authorized_keys` (não é usada).
 - Modelos de contrato (Word/PDF) em `docs/modelos/`: compra ou troca (do usuário), venda e termo de garantia de 3 meses.
 
 ## Testar localmente com Docker
