@@ -52,6 +52,7 @@ Fases 0–8 implementadas e testadas localmente. **Nada foi implantado na VPS** 
 - Repositório GitHub está **público**: recomendado torná-lo privado; nesse caso a VPS precisa de uma deploy key (somente leitura) para o `git fetch`.
 - Pendente: cópia externa dos backups; remover a chave `claude-sessao-gct` de `/root/.ssh/authorized_keys` (não é usada).
 - Modelos de contrato (Word/PDF) em `docs/modelos/`: compra ou troca (do usuário), venda e termo de garantia de 3 meses.
+- Anúncios: botão "Anunciar" no produto gera título, descrição curta e completa (`packages/shared/src/listing.ts`); padrão da empresa em `tenants.settings.listing` (novo, 3 meses de garantia, entrega na cidade da empresa, 12x no cartão). Publicação no Marketplace é manual, na conta do usuário (sem automação de contas).
 
 ## Testar localmente com Docker
 `bash infra/local/start.sh` (ou `infra\local\start.ps1` no Windows): gera `.env.production` local, sobe banco/migração/web/worker e cria as empresas demo (senha `demo-senha-local`). Verificado em clone limpo nesta sessão: login demo e painel sem erros de console.

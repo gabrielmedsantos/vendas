@@ -87,12 +87,22 @@ export const routes: RouteDef[] = [
               revenueGoalCents: z.string().regex(/^\d{1,12}$/).nullable().optional(),
               warrantyTerms: z.string().max(2000).nullable().optional(),
               receiptFooter: z.string().max(500).nullable().optional(),
+              listing: z
+                .object({
+                  condition: z.enum(['new', 'semi_new']),
+                  warrantyMonths: z.number().int().min(0).max(36),
+                  delivery: z.string().trim().max(160),
+                  cardInstallments: z.number().int().min(0).max(24),
+                  extra: z.string().trim().max(500),
+                })
+                .nullable()
+                .optional(),
             })
             .optional(),
         }),
         await body(),
       );
-      await A.updateTenantProfile(deps, actor, { ...input, email: input.email || null });
+      await A.updateTenantProfile(deps, actor, { ...input, email: input.email === undefined ? undefined : input.email || null });
     },
   },
   { method: 'POST', path: 'tenant/onboarding/dismiss', handler: ({ deps, actor }) => A.dismissOnboarding(deps, actor) },

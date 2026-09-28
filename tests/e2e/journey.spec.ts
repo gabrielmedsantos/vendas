@@ -87,6 +87,27 @@ test.describe.serial('jornada completa', () => {
     await expect(linha.getByText('+1 item')).toBeVisible();
   });
 
+  test('gerar anúncio do produto', async () => {
+    await page.goto('/app/produtos');
+    await page.getByRole('link', { name: /Celular Demo/ }).first().click();
+    await page.getByRole('button', { name: 'Anunciar' }).click();
+    const modal = page.getByRole('dialog');
+    await expect(modal.getByLabel('Título', { exact: true })).toHaveValue(/Novo com garantia de 3 meses/);
+    await expect(modal.getByLabel('Descrição curta')).toHaveValue(/Cartão em até 12x/);
+    await expect(modal.getByLabel('Descrição completa')).toHaveValue(/não cobre mau uso/);
+    await modal.getByLabel('O produto é novo ou seminovo?').selectOption('semi_new');
+    await modal.getByLabel('Estado do seminovo').fill('bateria 90%');
+    await expect(modal.getByLabel('Descrição curta')).toHaveValue(/Seminovo: bateria 90%/);
+    await modal.getByLabel('Entrega').fill('Entregamos em toda Fortaleza e região');
+    await modal.getByRole('button', { name: 'Salvar estas opções como padrão' }).click();
+    await expect(page.getByText('Padrão de anúncio salvo para a empresa.')).toBeVisible();
+    await page.screenshot({ path: '../test-results/anuncio.png', fullPage: true });
+    await modal.getByRole('button', { name: 'Fechar' }).first().click();
+    await page.getByRole('button', { name: 'Anunciar' }).click();
+    await expect(page.getByRole('dialog').getByLabel('Descrição curta')).toHaveValue(/Entregamos em toda Fortaleza e região/);
+    await page.getByRole('dialog').getByRole('button', { name: 'Fechar' }).first().click();
+  });
+
   test('venda simples com Pix', async () => {
     await page.goto('/app/vendas/nova');
     await pickProduct(page, 'Capa', /Capa Demo/);

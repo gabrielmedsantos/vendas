@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
-import { Archive, History, ShoppingBag, ShoppingCart, SlidersHorizontal } from 'lucide-react';
+import { Archive, History, Megaphone, ShoppingBag, ShoppingCart, SlidersHorizontal } from 'lucide-react';
 import { AdjustModal } from '@/components/products/adjust-modal';
+import { ListingModal } from '@/components/products/listing-modal';
 import { ProductPhotos } from '@/components/products/photos';
 import { ProductForm, toApi, type ProductFormValue } from '@/components/products/product-form';
 import { Badge, Button, Card, ErrorState, LinkButton, LoadingBlock, PageHeader, Table, Tabs, Td, Th } from '@/components/ui';
@@ -28,6 +29,7 @@ export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
   const [tab, setTab] = useState<'overview' | 'history' | 'edit'>('overview');
   const [adjust, setAdjust] = useState(false);
+  const [listing, setListing] = useState(false);
   const can = useCan();
   const qc = useQueryClient();
   const toast = useToast();
@@ -49,6 +51,7 @@ export default function ProductPage() {
         actions={<>
           <Badge tone={p.status === 'active' ? 'success' : 'neutral'}>{STATUS_LABEL[p.status]}</Badge>
           {can('sales.create') && p.status === 'active' && <LinkButton href={`/app/vendas/nova?variante=${p.variants[0]?.id}`}><ShoppingCart className="size-4" />Vender</LinkButton>}
+          {p.status === 'active' && <Button variant="secondary" onClick={() => setListing(true)}><Megaphone className="size-4" />Anunciar</Button>}
           {can('purchases.manage') && p.kind === 'physical' && <LinkButton variant="secondary" href={`/app/compras/nova?variante=${p.variants[0]?.id}`}><ShoppingBag className="size-4" />Entrada por compra</LinkButton>}
           {can('inventory.adjust') && p.kind === 'physical' && <Button variant="secondary" onClick={() => setAdjust(true)}><SlidersHorizontal className="size-4" />Ajustar</Button>}
           {can('products.manage') && p.status !== 'archived' && (
@@ -116,6 +119,7 @@ export default function ProductPage() {
         }} />
       )}
       {adjust && <AdjustModal open={adjust} onClose={() => setAdjust(false)} variants={p.variants} tracking={p.tracking} />}
+      {listing && <ListingModal open={listing} onClose={() => setListing(false)} product={p} />}
       <p className="mt-6 text-xs text-muted"><Link href="/app/produtos" className="hover:text-fg">← Voltar para produtos</Link></p>
     </div>
   );
