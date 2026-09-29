@@ -94,7 +94,7 @@ test.describe.serial('jornada completa', () => {
     const modal = page.getByRole('dialog');
     await expect(modal.getByLabel('Título', { exact: true })).toHaveValue(/Novo com garantia de 3 meses/);
     await expect(modal.getByLabel('Descrição curta')).toHaveValue(/Cartão em até 12x/);
-    await expect(modal.getByLabel('Descrição completa')).toHaveValue(/Não cobre mau uso/);
+    await expect(modal.getByLabel('Descrição completa')).toHaveValue(/3 meses de garantia da loja\./);
     await modal.getByLabel('O produto é novo ou seminovo?').selectOption('semi_new');
     await modal.getByLabel('Estado do seminovo').fill('bateria 90%');
     await expect(modal.getByLabel('Descrição curta')).toHaveValue(/Seminovo: bateria 90%/);

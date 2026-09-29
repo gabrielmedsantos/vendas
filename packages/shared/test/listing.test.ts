@@ -14,7 +14,8 @@ describe('anúncio', () => {
     expect(l.short).toContain('🛵 Entregamos em toda Fortaleza e região');
     expect(l.short).toContain('💳 Cartão em até 12x');
     expect(l.short).toContain('R$ 3.299,00');
-    expect(l.full).toContain('Não cobre mau uso');
+    expect(l.full).toContain('🛡️ Garantia\n3 meses de garantia da loja.');
+    expect(l.full).not.toContain('mau uso');
     expect(l.full).toContain('Pix, dinheiro ou cartão em até 12x.');
     expect(l.full).toContain('▪️ Marca: Apple');
     expect(l.short).toContain('🔒 Compra segura e produtos originais');

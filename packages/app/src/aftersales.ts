@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { nextNumber } from '@gct/db';
-import { addDays, formatDateBR, invalid, notFound } from '@gct/shared';
+import { addDays, formatDateBR, invalid, notFound, WARRANTY_TERMS_DEFAULT } from '@gct/shared';
 import { audit, requirePermission, requireWritable, todayLocal, tx, type Actor, type AppDeps } from './core';
 import { requestDocument } from './documents';
 import { decodeCursor, pageOf, zCentsNonNeg, zLocalDate, zPageQuery, zText, zUuid } from './validation';
@@ -174,7 +174,7 @@ export async function openWarrantyCase(deps: AppDeps, actor: Actor, input: z.inf
       termsLine = `${item.description}: ${item.warranty_days} dias a partir de ${formatDateBR(sale.sale_date)} (até ${formatDateBR(until)}).`;
     }
     const t = await trx.selectFrom('tenants').select(['settings']).where('id', '=', actor.tenantId).executeTakeFirstOrThrow();
-    const companyTerms = (t.settings as { warrantyTerms?: string }).warrantyTerms ?? '';
+    const companyTerms = (t.settings as { warrantyTerms?: string }).warrantyTerms?.trim() || WARRANTY_TERMS_DEFAULT;
     const number = await nextNumber(trx, actor.tenantId, 'warranty_case');
     const row = await trx
       .insertInto('warranty_cases')

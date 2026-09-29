@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { jsonb, nextNumber, sql, withTenant, type Tx } from '@gct/db';
-import { conflict, notFound } from '@gct/shared';
+import { conflict, notFound, WARRANTY_TERMS_DEFAULT } from '@gct/shared';
 import { audit, emit, requirePermission, tx, type Actor, type AppDeps } from './core';
 import { renderDocumentPdf } from './pdf';
 
@@ -29,7 +29,7 @@ async function companySnapshot(trx: Tx) {
   const settings = t.settings as { warrantyTerms?: string; receiptFooter?: string };
   return {
     name: t.name, legalName: t.legal_name, document: t.document, phone: t.phone, email: t.email, address: t.address,
-    warrantyTerms: settings.warrantyTerms ?? null, receiptFooter: settings.receiptFooter ?? null,
+    warrantyTerms: settings.warrantyTerms?.trim() || WARRANTY_TERMS_DEFAULT, receiptFooter: settings.receiptFooter ?? null,
   };
 }
 

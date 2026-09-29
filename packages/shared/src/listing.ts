@@ -94,8 +94,7 @@ export function buildListing(i: ListingInput): Listing {
   if (warranty > 0) {
     full.push(
       '🛡️ Garantia',
-      `${months(warranty)} de garantia da loja contra defeitos de funcionamento do aparelho.`,
-      '⚠️ Não cobre mau uso (quedas, tela ou traseira quebrada, contato com líquidos, aparelho aberto ou reparado por terceiros).',
+      `${months(warranty)} de garantia da loja.`,
       '',
     );
   }
@@ -108,3 +107,10 @@ export function buildListing(i: ListingInput): Listing {
 
   return { title, short, full: full.join('\n').trim() };
 }
+
+/** Termos de garantia usados quando a empresa não definiu os seus: só defeitos do equipamento; não cobre mau uso. */
+export const WARRANTY_TERMS_DEFAULT =
+  'A garantia da loja cobre somente defeitos de funcionamento do próprio equipamento (defeitos de fabricação ou de componentes) que surgirem dentro do prazo indicado, sem custo de peças e mão de obra. '
+  + 'A garantia não cobre mau uso: quedas, impactos, tela ou traseira trincada ou quebrada, contato com líquidos ou umidade, oxidação, danos elétricos por carregadores ou cabos inadequados, '
+  + 'aparelho aberto ou reparado por terceiros, alteração de sistema (root, jailbreak e similares), perda de dados e desgaste natural da bateria. '
+  + 'Para acionar, apresente o produto com este comprovante. Esta garantia não reduz os direitos previstos no Código de Defesa do Consumidor.';

@@ -75,6 +75,15 @@ describe('garantia', () => {
     expect(list.data).toHaveLength(1);
   });
 
+  it('sem termos definidos pela empresa, usa o texto padrão (não cobre mau uso)', async () => {
+    await updateTenantProfile(deps, actor, { settings: { warrantyTerms: null } });
+    const w = await openWarrantyCase(deps, actor, { saleId, saleItemId, description: 'Sem carregar' });
+    const row = await withTenant(deps.dbs.app, actor, (trx) => trx.selectFrom('warranty_cases').select(['warranty_terms_snapshot']).where('id', '=', w.id).executeTakeFirstOrThrow());
+    expect(row.warranty_terms_snapshot).toContain('não cobre mau uso');
+    expect(row.warranty_terms_snapshot).toContain('defeitos de funcionamento do próprio equipamento');
+    await setWarrantyStatus(deps, actor, w.id, 'rejected', 'Aberto só para teste');
+  });
+
   it('fora do prazo é recusado; produto sem garantia também', async () => {
     const v = await withTenant(deps.dbs.app, actor, (trx) => trx.selectFrom('sale_items').select('variant_id').where('id', '=', saleItemId).executeTakeFirstOrThrow());
     const old = new Date(Date.now() - 120 * 86400000).toISOString().slice(0, 10);

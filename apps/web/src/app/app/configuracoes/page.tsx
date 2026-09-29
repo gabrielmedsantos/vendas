@@ -6,12 +6,9 @@ import { Button, Card, ErrorState, Field, FormError, Input, LoadingBlock, MoneyI
 import { useToast } from '@/components/toast';
 import { api } from '@/lib/client/api';
 import { useCan } from '@/lib/client/session';
+import { WARRANTY_TERMS_DEFAULT } from '@gct/shared';
 
 interface Tenant { name: string; legalName: string | null; document: string | null; timezone: string; email: string | null; phone: string | null; address: Record<string, string>; settings: { revenueGoalCents?: string; warrantyTerms?: string; receiptFooter?: string } }
-const WARRANTY_DEFAULT = 'A garantia da loja cobre somente defeitos de funcionamento do próprio equipamento (defeitos de fabricação ou de componentes) que surgirem dentro do prazo indicado, sem custo de peças e mão de obra. '
-  + 'A garantia não cobre mau uso: quedas, impactos, tela ou traseira trincada ou quebrada, contato com líquidos ou umidade, oxidação, danos elétricos por carregadores ou cabos inadequados, '
-  + 'aparelho aberto ou reparado por terceiros, alteração de sistema (root, jailbreak e similares), perda de dados e desgaste natural da bateria. '
-  + 'Para acionar, apresente o produto com este comprovante. Esta garantia não reduz os direitos previstos no Código de Defesa do Consumidor.';
 const TZ = ['America/Sao_Paulo', 'America/Manaus', 'America/Cuiaba', 'America/Belem', 'America/Fortaleza', 'America/Recife', 'America/Bahia', 'America/Porto_Velho', 'America/Rio_Branco', 'America/Noronha'];
 
 export default function CompanySettings() {
@@ -70,8 +67,8 @@ export default function CompanySettings() {
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Meta de faturamento mensal" htmlFor="c-goal"><MoneyInput id="c-goal" value={f.revenueGoalCents ?? ''} onChange={(c) => setF({ ...f, revenueGoalCents: c })} /></Field>
             <Field label="Rodapé dos recibos" htmlFor="c-foot"><Input id="c-foot" value={f.receiptFooter ?? ''} onChange={set('receiptFooter')} /></Field>
-            <div className="sm:col-span-2"><Field label="Termos de garantia comercial" htmlFor="c-war" help="Aparecem nos recibos dos produtos com garantia. Use texto aprovado pela empresa; o documento guarda os termos vigentes na época."><Textarea id="c-war" rows={6} value={f.warrantyTerms ?? ''} onChange={set('warrantyTerms')} /></Field>
-              <Button type="button" variant="quiet" className="mt-1" onClick={() => { if (!f.warrantyTerms || confirm('Substituir o texto atual pelo texto padrão?')) setF({ ...f, warrantyTerms: WARRANTY_DEFAULT }); }}>Usar texto padrão (não cobre mau uso)</Button>
+            <div className="sm:col-span-2"><Field label="Termos de garantia comercial" htmlFor="c-war" help="Aparecem nos recibos dos produtos com garantia. Se ficar vazio, o recibo usa o texto padrão (só defeitos do equipamento; não cobre mau uso)."><Textarea id="c-war" rows={6} value={f.warrantyTerms ?? ''} onChange={set('warrantyTerms')} /></Field>
+              <Button type="button" variant="quiet" className="mt-1" onClick={() => { if (!f.warrantyTerms || confirm('Substituir o texto atual pelo texto padrão?')) setF({ ...f, warrantyTerms: WARRANTY_TERMS_DEFAULT }); }}>Usar texto padrão (não cobre mau uso)</Button>
             </div>
           </div>
         </Card>
