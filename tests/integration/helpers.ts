@@ -57,9 +57,18 @@ export function withPerms(actor: Actor, role: Role, grants: string[] = []): Acto
   return { ...actor, role, permissions: effectivePermissions(role, grants) };
 }
 
+/**
+ * Contas para os testes de várias contas. Empresa nova nasce com uma conta só ("Conta da loja");
+ * aqui se cria um caixa separado para dinheiro (configuração ainda suportada), como a loja faria em Financeiro.
+ */
 export async function accounts(deps: AppDeps, actor: Actor) {
   return withTenant(deps.dbs.app, actor, async (trx) => {
-    const rows = await trx.selectFrom('financial_accounts').select(['id', 'kind', 'name']).execute();
+    let rows = await trx.selectFrom('financial_accounts').select(['id', 'kind', 'name']).where('status', '=', 'active').execute();
+    if (!rows.some((r) => r.kind === 'cash')) {
+      const c = await trx.insertInto('financial_accounts').values({ tenant_id: actor.tenantId, name: 'Caixa da loja', kind: 'cash' }).returning('id').executeTakeFirstOrThrow();
+      await trx.updateTable('payment_methods').set({ account_id: c.id }).where('kind', '=', 'cash').execute();
+      rows = await trx.selectFrom('financial_accounts').select(['id', 'kind', 'name']).where('status', '=', 'active').execute();
+    }
     return { cash: rows.find((r) => r.kind === 'cash')!.id, bank: rows.find((r) => r.kind === 'bank')!.id };
   });
 }

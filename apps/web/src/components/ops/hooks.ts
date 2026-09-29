@@ -19,5 +19,6 @@ export interface Channel { id: string; name: string; commissionBps: number; acti
 
 export const usePaymentMethods = () => useQuery({ queryKey: ['payment-methods'], queryFn: () => api<PaymentMethod[]>('payment-methods') });
 export const useChannels = () => useQuery({ queryKey: ['channels'], queryFn: () => api<Channel[]>('channels') });
-export const useAccounts = (enabled = true) => useQuery({ queryKey: ['accounts'], queryFn: () => api<Account[]>('finance/accounts'), enabled });
+/** Contas ativas (as arquivadas, por exemplo depois de unificar, ficam só no histórico). */
+export const useAccounts = (enabled = true) => useQuery({ queryKey: ['accounts'], queryFn: () => api<Account[]>('finance/accounts'), enabled, select: (rows) => rows.filter((a) => a.status === 'active') });
 export const useCategories = () => useQuery({ queryKey: ['categories'], queryFn: () => api<{ id: string; name: string; productCount: number }[]>('categories') });

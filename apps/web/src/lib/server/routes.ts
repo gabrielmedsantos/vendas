@@ -336,6 +336,7 @@ export const routes: RouteDef[] = [
   { method: 'POST', path: 'finance/settlements/:id/reverse', handler: async ({ deps, actor, params, body }) => A.reverseSettlementAction(deps, actor, id(params), p(zReason, await body()).reason) },
   { method: 'GET', path: 'finance/accounts', handler: ({ deps, actor }) => A.listAccounts(deps, actor) },
   { method: 'POST', path: 'finance/accounts', handler: async ({ deps, actor, body }) => A.createAccount(deps, actor, p(A.zAccount, await body())) },
+  { method: 'POST', path: 'finance/accounts/unify', handler: async ({ deps, actor, body }) => A.unifyAccounts(deps, actor, p(A.zUnifyAccounts, await body())) },
   { method: 'GET', path: 'finance/cash-movements', handler: ({ deps, actor, query }) => A.listCashMovements(deps, actor, p(A.zStatement, queryObject(query))) },
   { method: 'POST', path: 'finance/cash-movements', handler: async ({ deps, actor, body, idempotencyKey }) => A.recordCashMovement(deps, actor, p(A.zCashMovement, await body()), idempotencyKey) },
   { method: 'POST', path: 'finance/transfers', handler: async ({ deps, actor, body, idempotencyKey }) => A.transferBetweenAccounts(deps, actor, p(A.zTransfer, await body()), idempotencyKey) },

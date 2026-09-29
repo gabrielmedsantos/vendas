@@ -41,8 +41,10 @@ async function demoUser(email: string, name: string): Promise<string | null> {
 
 async function accountsOf(actor: A.Actor) {
   return withTenant(dbs.app, actor, async (trx) => {
-    const rows = await trx.selectFrom('financial_accounts').select(['id', 'kind']).execute();
-    return { cash: rows.find((r) => r.kind === 'cash')!.id, bank: rows.find((r) => r.kind === 'bank')!.id };
+    const rows = await trx.selectFrom('financial_accounts').select(['id', 'kind']).where('status', '=', 'active').execute();
+    // Conta única: dinheiro, Pix e cartões entram na mesma conta.
+    const one = (rows.find((r) => r.kind === 'bank') ?? rows[0])!.id;
+    return { cash: rows.find((r) => r.kind === 'cash')?.id ?? one, bank: one };
   });
 }
 

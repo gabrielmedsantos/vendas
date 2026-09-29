@@ -144,16 +144,14 @@ export async function provisionTenant(deps: AppDeps, userId: string, input: Prov
 /** Cadastros padrão de uma empresa nova (local, contas, formas de pagamento, canal). */
 export async function seedTenantDefaults(trx: Tx, tenantId: string): Promise<void> {
   await trx.insertInto('locations').values({ tenant_id: tenantId, name: 'Loja principal', is_default: true }).execute();
-  const accounts = await trx
+  // Uma conta só para tudo (dinheiro, Pix e cartões). Quem quiser separar cria outras em Financeiro.
+  const account = await trx
     .insertInto('financial_accounts')
-    .values([
-      { tenant_id: tenantId, name: 'Caixa da loja', kind: 'cash' },
-      { tenant_id: tenantId, name: 'Conta bancária', kind: 'bank' },
-    ])
-    .returning(['id', 'kind'])
-    .execute();
-  const cash = accounts.find((a) => a.kind === 'cash')!.id;
-  const bank = accounts.find((a) => a.kind === 'bank')!.id;
+    .values({ tenant_id: tenantId, name: 'Conta da loja', kind: 'bank' })
+    .returning(['id'])
+    .executeTakeFirstOrThrow();
+  const cash = account.id;
+  const bank = account.id;
   await trx
     .insertInto('payment_methods')
     .values([

@@ -241,4 +241,22 @@ test.describe.serial('jornada completa', () => {
     await expect(page.getByRole('heading', { name: 'Entendendo a troca com diferença' })).toBeVisible();
     await expect(page.getByText(/cliente paga R\$ 500/)).toBeVisible();
   });
+
+  test('conta única: unificar contas antigas em uma só', async () => {
+    const base = process.env.E2E_BASE_URL ?? 'http://localhost:3000';
+    await page.goto('/app/financeiro');
+    await expect(page.getByText('Conta da loja').first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Unificar contas' })).toHaveCount(0);
+    // Empresa com a configuração antiga (caixa separado).
+    const res = await page.request.post('/api/v1/finance/accounts', { data: { name: 'Caixa antigo', kind: 'cash' }, headers: { origin: base } });
+    expect(res.ok(), await res.text()).toBeTruthy();
+    await page.reload();
+    await page.getByRole('button', { name: 'Unificar contas' }).click();
+    const modal = page.getByRole('dialog');
+    await expect(modal.getByLabel('Nome da conta')).toHaveValue('Conta da loja');
+    await modal.getByRole('button', { name: 'Unificar' }).click();
+    await expect(page.getByText('Contas unificadas: agora tudo entra numa conta só.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Unificar contas' })).toHaveCount(0);
+    await expect(page.getByText('Caixa antigo')).toHaveCount(0);
+  });
 });

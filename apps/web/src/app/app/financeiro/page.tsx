@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { ArrowLeftRight, Banknote, Lock, Plus, Vault } from 'lucide-react';
+import { ArrowLeftRight, Banknote, Lock, Merge, Plus, Vault } from 'lucide-react';
 import { useAccounts } from '@/components/ops/hooks';
 import { Badge, Button, Card, ErrorState, Field, FormError, Input, LoadingBlock, Modal, MoneyInput, PageHeader, Pager, Select, Table, Td, Th } from '@/components/ui';
 import { useToast } from '@/components/toast';
@@ -10,7 +10,7 @@ import { api, newKey, qs } from '@/lib/client/api';
 import { brl, dateBR, KIND_LABEL } from '@/lib/client/format';
 import { useCan } from '@/lib/client/session';
 
-type Dialog = null | 'movement' | 'transfer' | 'account' | 'open' | 'close' | 'period';
+type Dialog = null | 'movement' | 'transfer' | 'account' | 'open' | 'close' | 'period' | 'unify';
 
 export default function FinancePage() {
   const can = useCan();
@@ -37,12 +37,21 @@ export default function FinancePage() {
   return (
     <div>
       <PageHeader title="Financeiro" description="Saldos atuais das contas e livro de caixa realizado." actions={manage && <>
-        <Button variant="secondary" onClick={() => open('transfer', { from: accounts.data?.[0]?.id ?? '', to: accounts.data?.[1]?.id ?? '' })}><ArrowLeftRight className="size-4" />Transferência</Button>
+        {(accounts.data?.length ?? 0) > 1 && <Button variant="secondary" onClick={() => open('transfer', { from: accounts.data?.[0]?.id ?? '', to: accounts.data?.[1]?.id ?? '' })}><ArrowLeftRight className="size-4" />Transferência</Button>}
         <Button variant="secondary" onClick={() => open('movement', { kind: 'capital_in', accountId: accounts.data?.[0]?.id ?? '' })}><Banknote className="size-4" />Lançamento</Button>
         <Button onClick={() => open('account', { kind: 'bank' })}><Plus className="size-4" />Nova conta</Button>
       </>} />
       {accounts.isLoading && <LoadingBlock />}
       {accounts.error && <ErrorState error={accounts.error} />}
+      {manage && accounts.data && accounts.data.length > 1 && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/40 bg-primary/10 p-4 text-sm">
+          <div>
+            <p className="font-medium">Você tem {accounts.data.length} contas. Quer deixar uma só?</p>
+            <p className="text-muted">O saldo das outras vai para a conta escolhida, dinheiro, Pix e cartões passam a entrar nela e as outras são arquivadas. O histórico continua.</p>
+          </div>
+          <Button onClick={() => open('unify', { targetId: (accounts.data!.find((a) => a.kind === 'bank') ?? accounts.data![0]!).id, name: 'Conta da loja' })}><Merge className="size-4" />Unificar contas</Button>
+        </div>
+      )}
       {accounts.data && (
         <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-2xl border border-primary/40 bg-primary/10 p-4"><p className="text-xs text-muted">Saldo total (hoje)</p><p className="mt-1 text-2xl font-semibold tabular">{brl(total.toString())}</p></div>
@@ -92,6 +101,22 @@ export default function FinancePage() {
           <Field label="Valor" htmlFor="mv-v"><MoneyInput id="mv-v" value={f.amount ?? ''} onChange={(c) => setF({ ...f, amount: c })} /></Field>
           <Field label="Data" htmlFor="mv-d"><Input id="mv-d" type="date" value={f.date ?? ''} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field>
           <Field label="Descrição" htmlFor="mv-desc" required><Input id="mv-desc" value={f.description ?? ''} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field>
+          <FormError error={error} />
+        </div>
+      </Modal>
+      <Modal open={dialog === 'unify'} onClose={() => setDialog(null)} title="Unificar contas" footer={<><Button variant="secondary" onClick={() => setDialog(null)}>Cancelar</Button><Button loading={busy} disabled={!f.targetId || (f.name ?? '').trim().length < 2} onClick={() => run(() => api('finance/accounts/unify', { body: { targetId: f.targetId, name: f.name?.trim() || undefined } }), 'Contas unificadas: agora tudo entra numa conta só.')}>Unificar</Button></>}>
+        <div className="flex flex-col gap-3 text-sm">
+          <Field label="Conta que fica" htmlFor="un-target">
+            <Select id="un-target" value={f.targetId ?? ''} onChange={(e) => setF({ ...f, targetId: e.target.value })}>
+              {accounts.data?.map((a) => <option key={a.id} value={a.id}>{a.name} · {brl(a.balanceCents)}</option>)}
+            </Select>
+          </Field>
+          <Field label="Nome da conta" htmlFor="un-name"><Input id="un-name" maxLength={80} value={f.name ?? ''} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
+          <ul className="list-disc pl-5 text-muted">
+            <li>Saldo das outras contas: transferido para a conta que fica ({brl(total.toString())} no total). Transferência não é receita nem despesa.</li>
+            <li>Dinheiro, Pix, débito, crédito e transferência passam a entrar nesta conta.</li>
+            <li>As outras contas são arquivadas; os movimentos antigos continuam no histórico.</li>
+          </ul>
           <FormError error={error} />
         </div>
       </Modal>

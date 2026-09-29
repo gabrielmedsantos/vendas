@@ -560,6 +560,61 @@ export async function createAccount(deps: AppDeps, actor: Actor, input: z.infer<
   });
 }
 
+export const zUnifyAccounts = z.object({ targetId: zUuid, name: zText(80).min(2).optional() });
+
+/**
+ * Deixa uma conta só: o saldo de cada outra conta ativa vai para a conta escolhida por
+ * transferência interna (não é receita nem despesa), as formas de pagamento passam a usar
+ * a conta escolhida e as demais são arquivadas. Nada é apagado: o histórico continua.
+ */
+export async function unifyAccounts(deps: AppDeps, actor: Actor, input: z.infer<typeof zUnifyAccounts>) {
+  requirePermission(actor, 'finance.manage');
+  requireWritable(actor);
+  return tx(deps, actor, async (trx) => {
+    const accounts = await sql<{ id: string; name: string; status: string }>`select id, name, status from financial_accounts order by id for update`.execute(trx);
+    const target = accounts.rows.find((a) => a.id === input.targetId);
+    if (!target || target.status !== 'active') throw notFound('Conta');
+    const others = accounts.rows.filter((a) => a.status === 'active' && a.id !== target.id);
+    const open = await trx.selectFrom('cash_sessions').select('account_id').where('closed_at', 'is', null).execute();
+    if (open.length) throw conflict('Feche o caixa aberto antes de unificar as contas.');
+    const date = todayLocal(actor.timezone);
+    if (others.length) await assertPeriodOpen(trx, date);
+    let moved = 0n;
+    for (const o of others) {
+      const b = await sql<{ bal: bigint }>`select coalesce(sum(case when direction='in' then amount_cents else -amount_cents end),0)::bigint as bal from cash_movements where account_id = ${o.id}`.execute(trx);
+      const bal = BigInt(b.rows[0]!.bal);
+      if (bal !== 0n) {
+        // Saldo positivo vem para a conta escolhida; negativo é coberto por ela. Em ambos a outra zera.
+        const [from, to, amount] = bal > 0n ? [o.id, target.id, bal] : [target.id, o.id, -bal];
+        const t = await trx
+          .insertInto('account_transfers')
+          .values({ tenant_id: actor.tenantId, from_account_id: from, to_account_id: to, amount_cents: amount, occurred_on: date, description: `Unificação de contas: ${o.name} → ${target.name}`, created_by: actor.userId })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        await trx
+          .insertInto('cash_movements')
+          .values([
+            { tenant_id: actor.tenantId, account_id: from, direction: 'out', amount_cents: amount, kind: 'transfer_out', origin_type: 'transfer', origin_id: t.id, occurred_on: date, description: 'Unificação de contas', created_by: actor.userId },
+            { tenant_id: actor.tenantId, account_id: to, direction: 'in', amount_cents: amount, kind: 'transfer_in', origin_type: 'transfer', origin_id: t.id, occurred_on: date, description: 'Unificação de contas', created_by: actor.userId },
+          ])
+          .execute();
+        moved += bal;
+      }
+      await trx.updateTable('payment_methods').set({ account_id: target.id }).where('account_id', '=', o.id).execute();
+      await trx.updateTable('financial_accounts').set({ status: 'archived' }).where('id', '=', o.id).execute();
+    }
+    // Formas de pagamento que movimentam dinheiro e estavam sem conta também passam a usar a conta única.
+    await trx.updateTable('payment_methods').set({ account_id: target.id }).where('account_id', 'is', null).where('kind', 'in', ['cash', 'pix', 'debit', 'credit', 'bank_transfer']).execute();
+    if (input.name && input.name !== target.name) {
+      const clash = accounts.rows.find((a) => a.id !== target.id && a.name.toLowerCase() === input.name!.toLowerCase());
+      if (clash) throw conflict('Já existe uma conta com esse nome.');
+      await trx.updateTable('financial_accounts').set({ name: input.name }).where('id', '=', target.id).execute();
+    }
+    await audit(trx, actor, 'finance.accounts_unified', 'financial_account', target.id, { archived: others.map((o) => o.id), movedCents: moved });
+    return { accountId: target.id, archived: others.length };
+  });
+}
+
 export const zCashMovement = z.object({
   accountId: zUuid,
   kind: z.enum(['opening', 'capital_in', 'withdrawal', 'loan_in', 'loan_out', 'cash_adjustment']),
