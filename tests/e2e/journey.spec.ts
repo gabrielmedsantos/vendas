@@ -242,6 +242,31 @@ test.describe.serial('jornada completa', () => {
     await expect(page.getByText(/cliente paga R\$ 500/)).toBeVisible();
   });
 
+  test('despesa paga: corrigir e excluir', async () => {
+    await page.goto('/app/financeiro/despesas');
+    await page.getByRole('button', { name: 'Nova despesa' }).click();
+    let d = page.getByRole('dialog');
+    await d.getByLabel('Descrição').fill('Pistola demo');
+    await d.getByLabel('Valor').fill('171');
+    await d.getByLabel('Valor').blur();
+    await d.getByRole('button', { name: 'Registrar' }).click();
+    await expect(page.getByText('Despesa registrada.')).toBeVisible();
+    await page.getByRole('row').filter({ hasText: 'Pistola demo' }).getByRole('button', { name: 'Corrigir' }).click();
+    d = page.getByRole('dialog');
+    await d.getByLabel('Valor').fill('150');
+    await d.getByLabel('Valor').blur();
+    await d.getByRole('button', { name: 'Salvar correção' }).click();
+    await expect(page.getByText('Despesa corrigida.')).toBeVisible();
+    await expect(page.getByRole('row').filter({ hasText: 'Pistola demo' })).toHaveCount(1);
+    await expect(page.getByRole('row').filter({ hasText: 'Pistola demo' })).toContainText('R$ 150,00');
+    await page.getByRole('button', { name: 'Excluir Pistola demo' }).click();
+    d = page.getByRole('dialog');
+    await d.getByLabel('Motivo').fill('Lançada em duplicidade');
+    await d.getByRole('button', { name: 'Excluir' }).click();
+    await expect(page.getByText('Despesa excluída; valor devolvido à conta.')).toBeVisible();
+    await expect(page.getByRole('row').filter({ hasText: 'Pistola demo' })).toHaveCount(0);
+  });
+
   test('conta única: unificar contas antigas em uma só', async () => {
     const base = process.env.E2E_BASE_URL ?? 'http://localhost:3000';
     await page.goto('/app/financeiro');

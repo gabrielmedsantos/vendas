@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { Archive, History, Megaphone, ShoppingBag, ShoppingCart, SlidersHorizontal } from 'lucide-react';
+import { Archive, History, Megaphone, ShoppingBag, ShoppingCart, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { AdjustModal } from '@/components/products/adjust-modal';
 import { ListingModal } from '@/components/products/listing-modal';
 import { ProductPhotos } from '@/components/products/photos';
@@ -33,6 +33,7 @@ export default function ProductPage() {
   const can = useCan();
   const qc = useQueryClient();
   const toast = useToast();
+  const router = useRouter();
   const q = useQuery({ queryKey: ['product', id], queryFn: () => api<Product>(`products/${id}`) });
   const history = useQuery({ queryKey: ['product-history', id], queryFn: () => api<{ id: string; createdAt: string; direction: string; kind: string; bucket: string; quantity: number; physicalAfter: number; reason: string | null; sku: string; internalCode: string | null; costCents?: string }[]>(`products/${id}/history`), enabled: tab === 'history' });
   if (q.isLoading) return <LoadingBlock rows={6} />;
@@ -54,6 +55,12 @@ export default function ProductPage() {
           {p.status === 'active' && <Button variant="secondary" onClick={() => setListing(true)}><Megaphone className="size-4" />Anunciar</Button>}
           {can('purchases.manage') && p.kind === 'physical' && <LinkButton variant="secondary" href={`/app/compras/nova?variante=${p.variants[0]?.id}`}><ShoppingBag className="size-4" />Entrada por compra</LinkButton>}
           {can('inventory.adjust') && p.kind === 'physical' && <Button variant="secondary" onClick={() => setAdjust(true)}><SlidersHorizontal className="size-4" />Ajustar</Button>}
+          {can('products.manage') && (
+            <Button variant="quiet" onClick={async () => {
+              if (!confirm(`Excluir "${p.name}"? Só funciona para produto que nunca teve estoque, compra ou venda.`)) return;
+              try { await api(`products/${id}`, { method: 'DELETE' }); await qc.invalidateQueries({ queryKey: ['products'] }); toast('Produto excluído.'); router.push('/app/produtos'); } catch (e) { alert((e as Error).message); }
+            }}><Trash2 className="size-4" />Excluir</Button>
+          )}
           {can('products.manage') && p.status !== 'archived' && (
             <Button variant="quiet" onClick={async () => {
               try { await api(`products/${id}/status`, { body: { status: 'archived' } }); qc.invalidateQueries(); toast('Produto arquivado.'); } catch (e) { alert((e as Error).message); }

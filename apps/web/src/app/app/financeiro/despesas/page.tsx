@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Hash, Plus, Receipt, Search, Tag, TrendingDown } from 'lucide-react';
+import { Hash, Pencil, Plus, Receipt, Search, Tag, Trash2, TrendingDown } from 'lucide-react';
 import { monthRange } from '@gct/shared';
 import { useAccounts, useDebounced } from '@/components/ops/hooks';
 import { Badge, Button, Card, EmptyState, ErrorState, Field, FormError, Input, LoadingBlock, Modal, MoneyInput, PageHeader, Pager, Select, Stat, Table, Td, Th } from '@/components/ui';
@@ -26,6 +26,9 @@ export default function ExpensesPage() {
   const [term, setTerm] = useState('');
   const [cursor, setCursor] = useState<string | undefined>();
   const [creating, setCreating] = useState(false);
+  const [replacing, setReplacing] = useState<Row | null>(null);
+  const [removing, setRemoving] = useState<Row | null>(null);
+  const [reason, setReason] = useState('');
   const [f, setF] = useState({ description: '', categoryId: '', amount: '', competenceDate: today, dueDate: today, paid: true, accountId: '', method: 'pix', notes: '' });
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
@@ -65,7 +68,16 @@ export default function ExpensesPage() {
                   <tr key={e.id}><Td>{dateBR(e.competenceDate)}</Td><Td>{e.description}{e.notes && <div className="text-xs text-muted">{e.notes}</div>}</Td><Td>{e.kind === 'inventory_loss' ? <Badge tone="warning">Perda de estoque</Badge> : e.categoryName ?? '—'}</Td>
                     <Td>{e.titleStatus ? <Badge tone={e.titleStatus === 'settled' ? 'success' : 'warning'}>{e.titleStatus === 'settled' ? 'Pago' : 'A pagar'}</Badge> : '—'}</Td>
                     <Td right>{brl(e.amountCents)}</Td>
-                    <Td right>{e.kind === 'operating' && e.titleStatus !== 'settled' && can('finance.manage') && <Button size="sm" variant="quiet" onClick={async () => { const r = prompt('Motivo do cancelamento'); if (!r) return; try { await api(`finance/expenses/${e.id}/cancel`, { body: { reason: r } }); qc.invalidateQueries(); } catch (err) { alert((err as Error).message); } }}>Cancelar</Button>}</Td>
+                    <Td right>{e.kind === 'operating' && can('finance.manage') && (
+                      <span className="flex justify-end gap-1">
+                        <Button size="sm" variant="quiet" onClick={() => {
+                          setReplacing(e); setError(null); setKey(newKey());
+                          setF({ description: e.description, categoryId: cats.data?.find((c) => c.name === e.categoryName)?.id ?? '', amount: e.amountCents, competenceDate: e.competenceDate, dueDate: e.competenceDate, paid: e.titleStatus === 'settled', accountId: accounts.data?.[0]?.id ?? '', method: 'pix', notes: e.notes ?? '' });
+                          setCreating(true);
+                        }}><Pencil className="size-3.5" />Corrigir</Button>
+                        <Button size="sm" variant="quiet" aria-label={`Excluir ${e.description}`} onClick={() => { setRemoving(e); setReason(''); setError(null); }}><Trash2 className="size-3.5" />Excluir</Button>
+                      </span>
+                    )}</Td>
                   </tr>
                 ))}</tbody>
               </Table>
@@ -74,17 +86,36 @@ export default function ExpensesPage() {
           )}
         </div>
       </Card>
-      <Modal open={creating} onClose={() => setCreating(false)} title="Nova despesa" footer={<>
-        <Button variant="secondary" onClick={() => setCreating(false)}>Cancelar</Button>
+      <Modal open={!!removing} onClose={() => setRemoving(null)} title="Excluir despesa" footer={<>
+        <Button variant="secondary" onClick={() => setRemoving(null)}>Voltar</Button>
+        <Button variant="danger" loading={busy} disabled={reason.trim().length < 3} onClick={async () => {
+          setBusy(true); setError(null);
+          try { await api(`finance/expenses/${removing!.id}/cancel`, { body: { reason: reason.trim() } }); await qc.invalidateQueries(); toast('Despesa excluída; valor devolvido à conta.'); setRemoving(null); } catch (e) { setError(e); } finally { setBusy(false); }
+        }}>Excluir</Button>
+      </>}>
+        {removing && (
+          <div className="flex flex-col gap-3 text-sm">
+            <p><span className="font-medium">{removing.description}</span> · {brl(removing.amountCents)}</p>
+            <p className="text-muted">A despesa sai do resultado{removing.titleStatus === 'settled' ? ' e o pagamento é estornado: o valor volta para a conta' : ''}. Fica registrado no histórico quem excluiu e o motivo.</p>
+            <Field label="Motivo" htmlFor="ex-rm"><Input id="ex-rm" value={reason} maxLength={300} placeholder="Ex.: lançada em duplicidade" onChange={(e) => setReason(e.target.value)} /></Field>
+            <FormError error={error} />
+          </div>
+        )}
+      </Modal>
+      <Modal open={creating} onClose={() => { setCreating(false); setReplacing(null); }} title={replacing ? 'Corrigir despesa' : 'Nova despesa'} footer={<>
+        <Button variant="secondary" onClick={() => { setCreating(false); setReplacing(null); }}>Cancelar</Button>
         <Button loading={busy} onClick={async () => {
           setBusy(true); setError(null);
           try {
-            await api('finance/expenses', { idempotencyKey: key, body: { description: f.description, categoryId: f.categoryId || null, amountCents: f.amount, competenceDate: f.competenceDate, dueDate: f.dueDate, payNow: f.paid ? { accountId: f.accountId, method: f.method } : null, notes: f.notes || null } });
-            await qc.invalidateQueries(); toast('Despesa registrada.'); setCreating(false); setKey(newKey());
-          } catch (e) { setError(e); } finally { setBusy(false); }
-        }}>Registrar</Button>
+            // Corrigir = estorna a despesa original (pagamento volta para a conta) e registra a correta.
+            if (replacing) { await api(`finance/expenses/${replacing.id}/cancel`, { body: { reason: `Corrigida: ${f.description}`.slice(0, 500) } }); setReplacing(null); }
+            await api('finance/expenses', { idempotencyKey: key, body: { description: f.description, categoryId: f.categoryId || null, amountCents: f.amount, competenceDate: f.competenceDate, dueDate: f.dueDate, payNow: f.paid ? { accountId: f.accountId || accounts.data?.[0]?.id, method: f.method } : null, notes: f.notes || null } });
+            await qc.invalidateQueries(); toast(replacing ? 'Despesa corrigida.' : 'Despesa registrada.'); setCreating(false); setKey(newKey());
+          } catch (e) { await qc.invalidateQueries(); setError(e); } finally { setBusy(false); }
+        }}>{replacing ? 'Salvar correção' : 'Registrar'}</Button>
       </>}>
         <div className="flex flex-col gap-3">
+          {replacing && <p className="rounded-xl border border-line bg-bg p-3 text-xs text-muted">Ao salvar, a despesa original é estornada (se foi paga, o valor volta para a conta) e esta é registrada no lugar. Os dois lançamentos ficam no histórico.</p>}
           <Field label="Descrição" htmlFor="ex-d" required><Input id="ex-d" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Categoria" htmlFor="ex-c"><Select id="ex-c" value={f.categoryId} onChange={(e) => setF({ ...f, categoryId: e.target.value })}><option value="">Sem categoria</option>{cats.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>

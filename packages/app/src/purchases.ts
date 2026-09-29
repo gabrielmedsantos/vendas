@@ -4,8 +4,8 @@ import { jsonb, nextNumber, sql, type Tx } from '@gct/db';
 import { computePurchaseTotals, receivedCostShare } from '@gct/domain';
 import { allocateLargestRemainder, AppError, conflict, invalid, notFound } from '@gct/shared';
 import { audit, can, emit, idempotent, requirePermission, requireWritable, todayLocal, tx, type Actor, type AppDeps } from './core';
-import { assertPeriodOpen, cancelTitleBalance, createInstallmentTitles, createTitle, recordSettlement, type FinCtx } from './finance';
-import { defaultLocation, stockIn, upsertUnitForEntry, zUnitSpec, type UnitSpec } from './inventory';
+import { assertPeriodOpen, cancelTitleBalance, createInstallmentTitles, createTitle, recordSettlement, reverseTitlePayments, type FinCtx } from './finance';
+import { defaultLocation, stockIn, stockOutWholeLot, upsertUnitForEntry, zUnitSpec, type UnitSpec } from './inventory';
 import { requestDocument } from './documents';
 import { decodeCursor, pageOf, zCentsNonNeg, zCentsPos, zLocalDate, zPageQuery, zQty, zText, zUuid } from './validation';
 
@@ -295,8 +295,31 @@ export async function cancelPurchase(deps: AppDeps, actor: Actor, id: string, re
     if (!p) throw notFound('Compra');
     if (p.origin === 'trade') throw conflict('Compra de troca é revertida pela própria troca.');
     if (p.status === 'canceled') throw conflict('Compra já cancelada.');
-    if (p.status === 'partially_received' || p.status === 'received')
-      throw conflict('Compra com mercadoria recebida não pode ser cancelada diretamente. Registre devolução ao fornecedor.');
+    if (p.status === 'partially_received' || p.status === 'received') {
+      // Estorno de compra lançada por engano: só com todos os itens recebidos ainda intactos no estoque.
+      const lots = await trx
+        .selectFrom('goods_receipt_items as gi')
+        .innerJoin('goods_receipts as gr', 'gr.id', 'gi.receipt_id')
+        .select(['gi.lot_id'])
+        .where('gr.purchase_id', '=', id)
+        .orderBy('gi.lot_id')
+        .execute();
+      const lotIds = lots.map((l) => l.lot_id!).filter(Boolean);
+      if (lotIds.length) {
+        const extra = await trx.selectFrom('acquisition_costs').select('id').where('lot_id', 'in', lotIds).executeTakeFirst();
+        if (extra) throw conflict('A compra recebeu custo adicional (frete, reparo). Estorne esse custo antes.');
+      }
+      await assertPeriodOpen(trx, todayLocal(actor.timezone));
+      for (const lotId of lotIds) {
+        await stockOutWholeLot(trx, actor, lotId, { kind: 'reversal', sourceType: 'purchase_reversal', sourceId: id, reason });
+      }
+      const titles = await trx.selectFrom('financial_titles').select(['id']).where('origin_type', '=', 'purchase').where('origin_id', '=', id).orderBy('id').execute();
+      await reverseTitlePayments(trx, actor, titles.map((t) => t.id), `Compra #${p.number} estornada: ${reason}`);
+      for (const t of titles) await cancelTitleBalance(trx, actor, t.id, { type: 'purchase_cancel', id }, reason);
+      await trx.updateTable('purchases').set({ status: 'canceled', canceled_at: new Date(), cancel_reason: reason }).where('id', '=', id).execute();
+      await audit(trx, actor, 'purchase.reversed', 'purchase', id, { reason, lots: lotIds.length });
+      return { refundCents: 0n, reversed: true };
+    }
     let refundCents = 0n;
     if (p.status === 'approved') {
       const titles = await trx.selectFrom('financial_titles').select(['id', 'original_cents', 'balance_cents']).where('origin_type', '=', 'purchase').where('origin_id', '=', id).orderBy('id').execute();
@@ -313,7 +336,7 @@ export async function cancelPurchase(deps: AppDeps, actor: Actor, id: string, re
     }
     await trx.updateTable('purchases').set({ status: 'canceled', canceled_at: new Date(), cancel_reason: reason }).where('id', '=', id).execute();
     await audit(trx, actor, 'purchase.canceled', 'purchase', id, { reason, refundCents });
-    return { refundCents };
+    return { refundCents, reversed: false };
   });
 }
 

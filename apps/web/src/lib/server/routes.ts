@@ -201,6 +201,7 @@ export const routes: RouteDef[] = [
       await A.updateProduct(deps, actor, id(params), input);
     },
   },
+  { method: 'DELETE', path: 'products/:id', handler: ({ deps, actor, params }) => A.deleteProduct(deps, actor, id(params)) },
   {
     method: 'POST', path: 'products/:id/status',
     handler: async ({ deps, actor, params, body }) => A.setProductStatus(deps, actor, id(params), p(z.object({ status: z.enum(['active', 'inactive', 'archived']) }), await body()).status),
@@ -340,6 +341,7 @@ export const routes: RouteDef[] = [
   { method: 'POST', path: 'finance/accounts/:id/adjust-balance', handler: async ({ deps, actor, params, body, idempotencyKey }) => A.adjustAccountBalance(deps, actor, id(params), p(A.zAdjustBalance, await body()), idempotencyKey) },
   { method: 'POST', path: 'finance/accounts/unify', handler: async ({ deps, actor, body }) => A.unifyAccounts(deps, actor, p(A.zUnifyAccounts, await body())) },
   { method: 'GET', path: 'finance/cash-movements', handler: ({ deps, actor, query }) => A.listCashMovements(deps, actor, p(A.zStatement, queryObject(query))) },
+  { method: 'POST', path: 'finance/cash-movements/:id/reverse', handler: async ({ deps, actor, params, body }) => A.reverseCashMovement(deps, actor, id(params), p(zReason, await body()).reason) },
   { method: 'POST', path: 'finance/cash-movements', handler: async ({ deps, actor, body, idempotencyKey }) => A.recordCashMovement(deps, actor, p(A.zCashMovement, await body()), idempotencyKey) },
   { method: 'POST', path: 'finance/transfers', handler: async ({ deps, actor, body, idempotencyKey }) => A.transferBetweenAccounts(deps, actor, p(A.zTransfer, await body()), idempotencyKey) },
   { method: 'GET', path: 'finance/expenses', handler: ({ deps, actor, query }) => A.listExpenses(deps, actor, p(A.zExpenseList, queryObject(query))) },

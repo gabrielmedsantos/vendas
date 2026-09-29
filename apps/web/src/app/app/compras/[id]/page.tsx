@@ -52,6 +52,7 @@ export default function PurchaseDetail() {
           {p.status === 'draft' && can('purchases.manage') && <Button loading={busy} onClick={() => run(() => api(`purchases/${id}/approve`, { method: 'POST', idempotencyKey: key }), 'Compra aprovada; contas a pagar criadas.')}>Aprovar compra</Button>}
           {['approved', 'partially_received'].includes(p.status) && (can('purchases.receive') || can('purchases.manage')) && <Button onClick={() => { setQty(Object.fromEntries(pending.map((i) => [i.id, String(i.quantity - i.receivedQty)]))); setReceiving(true); }}>Receber mercadoria</Button>}
           {['draft', 'approved'].includes(p.status) && p.origin !== 'trade' && can('purchases.manage') && <Button variant="danger" onClick={() => setCancel(true)}>Cancelar</Button>}
+          {['received', 'partially_received'].includes(p.status) && p.origin !== 'trade' && can('purchases.manage') && <Button variant="danger" onClick={() => setCancel(true)}>Estornar compra</Button>}
           {p.tradeId && <Link className="text-sm text-primary-soft" href={`/app/trocas/${p.tradeId}`}>Ver troca</Link>}
         </>}
       />
@@ -101,11 +102,13 @@ export default function PurchaseDetail() {
           <FormError error={error} />
         </div>
       </Modal>
-      <Modal open={cancel} onClose={() => setCancel(false)} title="Cancelar compra" footer={<>
+      <Modal open={cancel} onClose={() => setCancel(false)} title={['received', 'partially_received'].includes(p.status) ? 'Estornar compra' : 'Cancelar compra'} footer={<>
         <Button variant="secondary" onClick={() => setCancel(false)}>Voltar</Button>
-        <Button variant="danger" loading={busy} onClick={() => run(() => api(`purchases/${id}/cancel`, { body: { reason } }), 'Compra cancelada.')}>Cancelar compra</Button>
+        <Button variant="danger" loading={busy} onClick={() => run(() => api(`purchases/${id}/cancel`, { body: { reason } }), ['received', 'partially_received'].includes(p.status) ? 'Compra estornada: itens fora do estoque e valor devolvido à conta.' : 'Compra cancelada.')}>{['received', 'partially_received'].includes(p.status) ? 'Estornar compra' : 'Cancelar compra'}</Button>
       </>}>
-        <p className="mb-3 text-sm text-muted">Contas a pagar em aberto serão canceladas. Valores já pagos viram um título a receber do fornecedor (reembolso).</p>
+        {['received', 'partially_received'].includes(p.status)
+          ? <p className="mb-3 text-sm text-muted">Para compra lançada por engano. Os itens recebidos saem do estoque, os pagamentos são estornados (o valor volta para a conta) e as contas a pagar são canceladas. Só é possível se nenhum item desta compra foi vendido. Tudo fica no histórico com o motivo.</p>
+          : <p className="mb-3 text-sm text-muted">Contas a pagar em aberto serão canceladas. Valores já pagos viram um título a receber do fornecedor (reembolso).</p>}
         <Field label="Motivo" htmlFor="creason" required><Input id="creason" value={reason} onChange={(e) => setReason(e.target.value)} /></Field>
         <div className="mt-3"><FormError error={error} /></div>
       </Modal>

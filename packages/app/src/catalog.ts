@@ -262,6 +262,41 @@ export async function updateProduct(deps: AppDeps, actor: Actor, id: string, inp
   });
 }
 
+/**
+ * Exclui produto cadastrado por engano que nunca foi usado (sem estoque, compra, venda, troca ou catálogo).
+ * Produto com qualquer histórico não é excluído: use Arquivar.
+ */
+export async function deleteProduct(deps: AppDeps, actor: Actor, id: string) {
+  requirePermission(actor, 'products.manage');
+  requireWritable(actor);
+  const used = conflict('Este produto já tem movimentação (estoque, compra, venda ou catálogo) e não pode ser excluído. Use Arquivar.');
+  let keys: string[] = [];
+  try {
+    await tx(deps, actor, async (trx) => {
+      const p = await trx.selectFrom('products').select(['id', 'name']).where('id', '=', id).forUpdate().executeTakeFirst();
+      if (!p) throw notFound('Produto');
+      const hist = await sql<{ n: number }>`
+        select (select count(*) from stock_movements m join product_variants v on v.id = m.variant_id where v.product_id = ${id})
+             + (select count(*) from purchase_items i join product_variants v on v.id = i.variant_id where v.product_id = ${id})
+             + (select count(*) from sale_items i join product_variants v on v.id = i.variant_id where v.product_id = ${id})
+             + (select count(*) from inventory_units u join product_variants v on v.id = u.variant_id where v.product_id = ${id}) as n`.execute(trx);
+      if (Number(hist.rows[0]!.n) > 0) throw used;
+      const imgs = await trx.selectFrom('product_images as pi').innerJoin('attachments as a', 'a.id', 'pi.attachment_id').select(['a.id', 'a.storage_key']).where('pi.product_id', '=', id).execute();
+      await trx.deleteFrom('product_images').where('product_id', '=', id).execute();
+      if (imgs.length) await trx.deleteFrom('attachments').where('id', 'in', imgs.map((i) => i.id)).execute();
+      await trx.deleteFrom('product_variants').where('product_id', '=', id).execute();
+      await trx.deleteFrom('products').where('id', '=', id).execute();
+      await audit(trx, actor, 'product.deleted', 'product', id, { name: p.name });
+      keys = imgs.map((i) => i.storage_key);
+    });
+  } catch (e) {
+    // Referência não prevista (ex.: item em catálogo ou pedido): mesma resposta de "já usado".
+    if ((e as { code?: string }).code === '23503') throw used;
+    throw e;
+  }
+  for (const k of keys) await deps.storage.delete(k).catch(() => undefined);
+}
+
 export async function setProductStatus(deps: AppDeps, actor: Actor, id: string, status: 'active' | 'inactive' | 'archived') {
   requirePermission(actor, 'products.manage');
   requireWritable(actor);

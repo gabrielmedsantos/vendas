@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { sql, type Tx } from '@gct/db';
 import { assertAllocationWithinBalance, buildInstallments, titleStatus } from '@gct/domain';
 import { addDays, AppError, conflict, invalid, notFound, sumCents } from '@gct/shared';
-import { audit, can, emit, idempotent, requirePermission, requireWritable, todayLocal, tx, type Actor, type AppDeps } from './core';
+import { audit, can, emit, idempotent, isUniqueViolation, requirePermission, requireWritable, todayLocal, tx, type Actor, type AppDeps } from './core';
 import { decodeCursor, pageOf, zCentsNonNeg, zCentsPos, zLocalDate, zPageQuery, zText, zUuid } from './validation';
 
 export interface FinCtx {
@@ -292,6 +292,25 @@ export async function reverseSettlement(trx: Tx, ctx: FinCtx, settlementId: stri
   return rev.id;
 }
 
+/**
+ * Estorna todos os pagamentos/recebimentos ainda válidos destes títulos (dinheiro volta para a conta,
+ * por lançamento de estorno vinculado). Pagamento que também quitou outro título bloqueia.
+ */
+export async function reverseTitlePayments(trx: Tx, ctx: FinCtx, titleIds: string[], reason: string): Promise<number> {
+  if (!titleIds.length) return 0;
+  const rows = await sql<{ settlement_id: string }>`
+    select distinct a.settlement_id from settlement_allocations a join settlements s on s.id = a.settlement_id
+    where a.title_id in (${sql.join(titleIds)}) and s.reversal_of is null
+      and not exists (select 1 from settlements r where r.reversal_of = s.id)
+    order by a.settlement_id`.execute(trx);
+  for (const r of rows.rows) {
+    const other = await trx.selectFrom('settlement_allocations').select('title_id').where('settlement_id', '=', r.settlement_id).where('title_id', 'not in', titleIds).executeTakeFirst();
+    if (other) throw conflict('O pagamento também quitou outro lançamento; estorne esse pagamento em A pagar/A receber.');
+    await reverseSettlement(trx, ctx, r.settlement_id, reason);
+  }
+  return rows.rows.length;
+}
+
 // ---------------------------------------------------------------------------
 // Compensação (troca) e crédito de loja
 
@@ -566,7 +585,7 @@ const OUT_LABEL: Record<string, string> = {
   acquisition_cost: 'Custos de aquisição pagos (frete, reparo)', manual: 'Pagamentos avulsos', mixed: 'Pagamentos',
 };
 const KIND_LABEL: Record<string, string> = {
-  opening: 'Saldo inicial', capital_in: 'Aportes do dono', withdrawal: 'Retiradas do dono', loan_in: 'Empréstimos recebidos', loan_out: 'Empréstimos pagos', reversal: 'Estornos de recebimentos/pagamentos',
+  opening: 'Saldo inicial', capital_in: 'Aportes do dono', withdrawal: 'Retiradas do dono', loan_in: 'Empréstimos recebidos', loan_out: 'Empréstimos pagos', reversal: 'Estornos de lançamentos',
 };
 
 /**
@@ -577,20 +596,25 @@ const KIND_LABEL: Record<string, string> = {
 export async function balanceBreakdown(deps: AppDeps, actor: Actor) {
   requirePermission(actor, 'finance.view');
   return tx(deps, actor, async (trx) => {
-    const r = await sql<{ direction: 'in' | 'out'; kind: string; origin_type: string; title_origin: string | null; cents: bigint; n: number }>`
+    const r = await sql<{ direction: 'in' | 'out'; kind: string; origin_type: string; title_origin: string | null; settlement_direction: 'in' | 'out' | null; cents: bigint; n: number }>`
       select m.direction, m.kind, m.origin_type,
-             case when m.kind = 'settlement' then (
+             case when m.kind = 'settlement' or m.origin_type = 'settlement_reversal' then (
                select case when count(distinct t.origin_type) = 1 then min(t.origin_type) else 'mixed' end
                from settlement_allocations a join financial_titles t on t.id = a.title_id where a.settlement_id = m.origin_id) end as title_origin,
+             (select s.direction from settlements s where m.origin_type in ('settlement', 'settlement_reversal') and s.id = m.origin_id) as settlement_direction,
              sum(m.amount_cents)::bigint as cents, count(*)::int as n
       from cash_movements m
       where m.kind not in ('transfer_in', 'transfer_out')
-      group by 1, 2, 3, 4`.execute(trx);
+      group by 1, 2, 3, 4, 5`.execute(trx);
     const lines = new Map<string, { label: string; cents: bigint; count: number }>();
     for (const row of r.rows) {
       let label: string;
-      if (row.kind === 'settlement') label = (row.direction === 'in' ? IN_LABEL : OUT_LABEL)[row.title_origin ?? 'mixed'] ?? (row.direction === 'in' ? 'Recebimentos' : 'Pagamentos');
-      else if (row.kind === 'cash_adjustment') label = row.origin_type === 'balance_adjustment' ? 'Ajustes de saldo (conferência)' : row.origin_type === 'cash_session' ? 'Diferenças no fechamento de caixa' : 'Ajustes de caixa';
+      // Pagamento estornado entra na mesma linha do pagamento original (subtrai dela).
+      if (row.kind === 'settlement' || row.origin_type === 'settlement_reversal') {
+        const dir = row.settlement_direction ?? row.direction;
+        label = (dir === 'in' ? IN_LABEL : OUT_LABEL)[row.title_origin ?? 'mixed'] ?? (dir === 'in' ? 'Recebimentos' : 'Pagamentos');
+      }
+      else if (row.kind === 'cash_adjustment' || (row.kind === 'reversal' && row.origin_type === 'balance_adjustment')) label = row.origin_type === 'balance_adjustment' ? 'Ajustes de saldo (conferência)' : row.origin_type === 'cash_session' ? 'Diferenças no fechamento de caixa' : 'Ajustes de caixa';
       else label = KIND_LABEL[row.kind] ?? row.kind;
       const signed = row.direction === 'in' ? BigInt(row.cents) : -BigInt(row.cents);
       const cur = lines.get(label) ?? { label, cents: 0n, count: 0 };
@@ -611,6 +635,43 @@ export async function balanceBreakdown(deps: AppDeps, actor: Actor) {
     }
     return { items, balanceCents: balance, openPayableCents: payable, openReceivableCents: receivable, ...(stockCostCents !== undefined ? { stockCostCents } : {}) };
   });
+}
+
+const REVERSIBLE_KINDS = ['opening', 'capital_in', 'withdrawal', 'loan_in', 'loan_out', 'cash_adjustment'];
+
+/** Estorna lançamento manual (aporte, retirada, empréstimo, saldo inicial, ajuste): lançamento oposto vinculado. */
+export async function reverseCashMovement(deps: AppDeps, actor: Actor, movementId: string, reason: string) {
+  requirePermission(actor, 'finance.manage');
+  requireWritable(actor);
+  if (reason.trim().length < 3) throw invalid('Informe o motivo do estorno.');
+  try {
+    return await tx(deps, actor, async (trx) => {
+    // Livro só aceita inclusão (sem UPDATE): concorrência garantida pelo índice único de reversal_of.
+    const m = await trx.selectFrom('cash_movements').selectAll().where('id', '=', movementId).executeTakeFirst();
+    if (!m) throw notFound('Lançamento');
+    if (!['manual', 'balance_adjustment'].includes(m.origin_type) || !REVERSIBLE_KINDS.includes(m.kind))
+      throw conflict('Este movimento vem de uma venda, compra ou despesa: estorne pela tela de origem.');
+    const done = await trx.selectFrom('cash_movements').select('id').where('reversal_of', '=', m.id).executeTakeFirst();
+    if (done) throw conflict('Lançamento já estornado.');
+    const date = todayLocal(actor.timezone);
+    await assertPeriodOpen(trx, date);
+    const r = await trx
+      .insertInto('cash_movements')
+      .values({
+        tenant_id: actor.tenantId, account_id: m.account_id, direction: m.direction === 'in' ? 'out' : 'in', amount_cents: m.amount_cents, kind: 'reversal',
+        // Estorno de ajuste de conferência continua fora do caixa do período, como o original.
+        origin_type: m.origin_type === 'balance_adjustment' ? 'balance_adjustment' : 'manual_reversal', origin_id: m.id,
+        occurred_on: date, description: `Estorno: ${reason}`, reversal_of: m.id, created_by: actor.userId,
+      })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    await audit(trx, actor, 'finance.cash_movement_reversed', 'cash_movement', m.id, { reason, reversalId: r.id });
+    return { id: r.id };
+    });
+  } catch (e) {
+    if (isUniqueViolation(e)) throw conflict('Lançamento já estornado.');
+    throw e;
+  }
 }
 
 export const zUnifyAccounts = z.object({ targetId: zUuid, name: zText(80).min(2).optional() });
@@ -796,7 +857,8 @@ export async function listCashMovements(deps: AppDeps, actor: Actor, q: z.infer<
     let query = trx
       .selectFrom('cash_movements as m')
       .innerJoin('financial_accounts as a', 'a.id', 'm.account_id')
-      .select(['m.id', 'm.occurred_on', 'm.direction', 'm.amount_cents', 'm.kind', 'm.origin_type', 'm.origin_id', 'm.description', 'a.name as account_name', 'm.created_at']);
+      .select(['m.id', 'm.occurred_on', 'm.direction', 'm.amount_cents', 'm.kind', 'm.origin_type', 'm.origin_id', 'm.description', 'a.name as account_name', 'm.created_at', 'm.reversal_of'])
+      .select(sql<boolean>`exists (select 1 from cash_movements r where r.reversal_of = m.id)`.as('reversed'));
     if (q.accountId) query = query.where('m.account_id', '=', q.accountId);
     if (q.from) query = query.where('m.occurred_on', '>=', q.from);
     if (q.to) query = query.where('m.occurred_on', '<=', q.to);
@@ -871,7 +933,10 @@ export async function cancelExpense(deps: AppDeps, actor: Actor, id: string, rea
     await assertPeriodOpen(trx, e.competence_date);
     if (e.title_id) {
       const t = await trx.selectFrom('financial_titles').select(['balance_cents', 'original_cents']).where('id', '=', e.title_id).executeTakeFirstOrThrow();
-      if (t.balance_cents !== t.original_cents) throw conflict('Despesa já paga: estorne o pagamento antes de cancelar.');
+      // Despesa paga: o pagamento é estornado (dinheiro volta para a conta) e a despesa sai do resultado.
+      if (t.balance_cents !== t.original_cents) await reverseTitlePayments(trx, actor, [e.title_id], `Despesa excluída: ${reason}`);
+      const after = await trx.selectFrom('financial_titles').select(['balance_cents', 'original_cents']).where('id', '=', e.title_id).executeTakeFirstOrThrow();
+      if (after.balance_cents !== after.original_cents) throw conflict('Despesa com pagamento que não pode ser estornado automaticamente; estorne em A pagar.');
       await cancelTitleBalance(trx, actor, e.title_id, { type: 'expense', id }, reason);
     }
     await trx.updateTable('expenses').set({ status: 'canceled', canceled_at: new Date(), cancel_reason: reason }).where('id', '=', id).execute();

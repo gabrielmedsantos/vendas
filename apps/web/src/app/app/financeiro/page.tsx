@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { ArrowLeftRight, Banknote, Lock, Merge, Plus, Scale, Vault } from 'lucide-react';
+import { ArrowLeftRight, Banknote, Lock, Merge, Plus, Scale, Undo2, Vault } from 'lucide-react';
 import { useAccounts } from '@/components/ops/hooks';
 import { Badge, Button, Card, cx, ErrorState, Field, FormError, Input, LoadingBlock, Modal, MoneyInput, PageHeader, Pager, Select, Table, Td, Th } from '@/components/ui';
 import { useToast } from '@/components/toast';
@@ -10,7 +10,7 @@ import { api, newKey, qs } from '@/lib/client/api';
 import { brl, dateBR, KIND_LABEL } from '@/lib/client/format';
 import { useCan } from '@/lib/client/session';
 
-type Dialog = null | 'movement' | 'transfer' | 'account' | 'open' | 'close' | 'period' | 'unify' | 'adjust';
+type Dialog = null | 'movement' | 'transfer' | 'account' | 'open' | 'close' | 'period' | 'unify' | 'adjust' | 'reverse';
 
 export default function FinancePage() {
   const can = useCan();
@@ -19,7 +19,7 @@ export default function FinancePage() {
   const accounts = useAccounts();
   const [cursor, setCursor] = useState<string | undefined>();
   const [accountFilter, setAccountFilter] = useState('');
-  const moves = useQuery({ queryKey: ['cash-moves', cursor, accountFilter], queryFn: () => api<{ data: { id: string; occurredOn: string; direction: string; amountCents: string; kind: string; originType: string; description: string | null; accountName: string }[]; meta: { cursor: string | null; hasMore: boolean } }>(`finance/cash-movements${qs({ cursor, accountId: accountFilter })}`) });
+  const moves = useQuery({ queryKey: ['cash-moves', cursor, accountFilter], queryFn: () => api<{ data: { id: string; occurredOn: string; direction: string; amountCents: string; kind: string; originType: string; description: string | null; accountName: string; reversed: boolean; reversalOf: string | null }[]; meta: { cursor: string | null; hasMore: boolean } }>(`finance/cash-movements${qs({ cursor, accountId: accountFilter })}`) });
   const breakdown = useQuery({ queryKey: ['balance-breakdown'], queryFn: () => api<{ items: { label: string; cents: string; count: number }[]; balanceCents: string; openPayableCents: string; openReceivableCents: string; stockCostCents?: string }>('finance/balance-breakdown') });
   const periods = useQuery({ queryKey: ['periods'], queryFn: () => api<{ period: string; status: string; reason: string | null }[]>('finance/periods') });
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -106,9 +106,12 @@ export default function FinancePage() {
           {moves.data && moves.data.data.length > 0 && (
             <>
               <Table>
-                <thead><tr><Th>Data</Th><Th>Conta</Th><Th>Tipo</Th><Th>Descrição</Th><Th right>Valor</Th></tr></thead>
+                <thead><tr><Th>Data</Th><Th>Conta</Th><Th>Tipo</Th><Th>Descrição</Th><Th right>Valor</Th>{manage && <Th />}</tr></thead>
                 <tbody>{moves.data.data.map((m) => (
-                  <tr key={m.id}><Td>{dateBR(m.occurredOn)}</Td><Td>{m.accountName}</Td><Td>{KIND_LABEL[m.kind] ?? m.kind}</Td><Td className="text-muted">{m.description ?? ''}</Td><Td right className={m.direction === 'in' ? 'text-success' : 'text-danger-soft'}>{m.direction === 'in' ? '+' : '−'}{brl(m.amountCents)}</Td></tr>
+                  <tr key={m.id}><Td>{dateBR(m.occurredOn)}</Td><Td>{m.accountName}</Td><Td>{KIND_LABEL[m.kind] ?? m.kind}</Td><Td className="text-muted">{m.description ?? ''}</Td><Td right className={m.direction === 'in' ? 'text-success' : 'text-danger-soft'}>{m.direction === 'in' ? '+' : '−'}{brl(m.amountCents)}</Td>
+                    {manage && <Td right>{m.reversed ? <Badge tone="neutral">Estornado</Badge> : ['manual', 'balance_adjustment'].includes(m.originType) && m.kind !== 'reversal'
+                      ? <Button size="sm" variant="quiet" onClick={() => { setTarget(m.id); open('reverse', { reason: '' }); }}><Undo2 className="size-3.5" />Estornar</Button>
+                      : null}</Td>}</tr>
                 ))}</tbody>
               </Table>
               <Pager hasMore={moves.data.meta.hasMore} cursor={moves.data.meta.cursor} onNext={setCursor} onFirst={() => setCursor(undefined)} isFirst={!cursor} />
@@ -120,7 +123,7 @@ export default function FinancePage() {
         </Card>
       </div>
 
-      <Modal open={dialog === 'movement'} onClose={() => setDialog(null)} title="Lançamento financeiro" footer={<><Button variant="secondary" onClick={() => setDialog(null)}>Cancelar</Button><Button loading={busy} onClick={() => run(() => api('finance/cash-movements', { idempotencyKey: key, body: { accountId: f.accountId, kind: f.kind, direction: f.kind === 'cash_adjustment' ? f.direction || 'in' : undefined, amountCents: f.amount, occurredOn: f.date || undefined, description: f.description } }), 'Lançamento registrado.')}>Registrar</Button></>}>
+      <Modal open={dialog === 'movement'} onClose={() => setDialog(null)} title="Lançamento financeiro" footer={<><Button variant="secondary" onClick={() => setDialog(null)}>Cancelar</Button><Button loading={busy} onClick={() => run(() => api('finance/cash-movements', { idempotencyKey: key, body: { accountId: f.accountId || accounts.data?.[0]?.id, kind: f.kind, direction: f.kind === 'cash_adjustment' ? f.direction || 'in' : undefined, amountCents: f.amount, occurredOn: f.date || undefined, description: f.description } }), 'Lançamento registrado.')}>Registrar</Button></>}>
         <div className="flex flex-col gap-3">
           <p className="text-xs text-muted">Aportes, retiradas, empréstimos e saldo inicial têm tipos próprios e não entram na receita de vendas nem nas despesas operacionais.</p>
           <Field label="Tipo" htmlFor="mv-k"><Select id="mv-k" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}>{['opening', 'capital_in', 'withdrawal', 'loan_in', 'loan_out', 'cash_adjustment'].map((k) => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}</Select></Field>
@@ -152,6 +155,13 @@ export default function FinancePage() {
           </Modal>
         );
       })()}
+      <Modal open={dialog === 'reverse'} onClose={() => setDialog(null)} title="Estornar lançamento" footer={<><Button variant="secondary" onClick={() => setDialog(null)}>Voltar</Button><Button variant="danger" loading={busy} disabled={(f.reason ?? '').trim().length < 3} onClick={() => run(() => api(`finance/cash-movements/${target}/reverse`, { body: { reason: (f.reason ?? '').trim() } }), 'Lançamento estornado.')}>Estornar</Button></>}>
+        <div className="flex flex-col gap-3 text-sm">
+          <p className="text-muted">Cria um lançamento oposto de mesmo valor, que anula o original. Os dois ficam no histórico. Movimentos de venda, compra e despesa se estornam na própria tela deles.</p>
+          <Field label="Motivo" htmlFor="rv-reason"><Input id="rv-reason" maxLength={300} placeholder="Ex.: lançado errado" value={f.reason ?? ''} onChange={(e) => setF({ ...f, reason: e.target.value })} /></Field>
+          <FormError error={error} />
+        </div>
+      </Modal>
       <Modal open={dialog === 'unify'} onClose={() => setDialog(null)} title="Unificar contas" footer={<><Button variant="secondary" onClick={() => setDialog(null)}>Cancelar</Button><Button loading={busy} disabled={!f.targetId || (f.name ?? '').trim().length < 2} onClick={() => run(() => api('finance/accounts/unify', { body: { targetId: f.targetId, name: f.name?.trim() || undefined } }), 'Contas unificadas: agora tudo entra numa conta só.')}>Unificar</Button></>}>
         <div className="flex flex-col gap-3 text-sm">
           <Field label="Conta que fica" htmlFor="un-target">
