@@ -21,3 +21,4 @@ export * from './storefront';
 export * from './platform';
 export * from './aftersales';
 export * from './growth';
+export * from './flyer';

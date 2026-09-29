@@ -5,3 +5,4 @@ export * from './permissions';
 export * from './dates';
 export * from './text';
 export * from './listing';
+export * from './flyer';

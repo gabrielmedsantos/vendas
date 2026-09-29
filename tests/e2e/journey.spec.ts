@@ -1,3 +1,4 @@
+import sharp from 'sharp';
 import { expect, test, type Page } from '@playwright/test';
 
 /**
@@ -107,6 +108,30 @@ test.describe.serial('jornada completa', () => {
     await page.getByRole('button', { name: 'Anunciar' }).click();
     await expect(page.getByRole('dialog').getByLabel('Descrição curta')).toHaveValue(/Entregamos em toda Fortaleza e região/);
     await page.getByRole('dialog').getByRole('button', { name: 'Fechar' }).first().click();
+  });
+
+  test('encarte digital com logo e cores da marca', async () => {
+    await page.goto('/app/catalogo');
+    await page.getByRole('tab', { name: 'Encarte digital' }).or(page.getByRole('button', { name: 'Encarte digital' })).first().click();
+    await expect(page.getByTestId('flyer-preview')).toBeVisible();
+    // Logo com azul, amarelo e vermelho → cores do encarte tiradas da logo.
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120"><rect width="300" height="120" fill="#1e3a8a"/><circle cx="70" cy="60" r="45" fill="#facc15"/><rect x="140" y="30" width="130" height="60" rx="12" fill="#dc2626"/></svg>`;
+    const logo = await sharp(Buffer.from(svg)).png().toBuffer();
+    await page.locator('#logo-input').setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: logo });
+    await expect(page.getByText('Cores tiradas da logo. Ajuste se quiser.')).toBeVisible();
+    await expect(page.getByLabel('Cor do título (hex)')).toHaveValue(/^#f[89a-f]c[b-d]1[0-9a-f]$/);
+    await page.getByLabel('Título', { exact: true }).fill('Mega Saldão');
+    await page.getByLabel('Acréscimo no cartão (%)').fill('11,14');
+    await page.getByLabel('Validade das ofertas').fill('Ofertas válidas até 31/10');
+    await page.getByRole('button', { name: 'Salvar identidade e textos' }).click();
+    await expect(page.getByText('Identidade visual e textos salvos.')).toBeVisible();
+    await expect(page.getByTestId('flyer-preview')).toContainText('Celular Demo');
+    await expect(page.getByTestId('flyer-preview')).toContainText('no cartão');
+    await page.getByTestId('flyer-preview').screenshot({ path: '../test-results/encarte-previa.png' });
+    const [pdf] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'PDF' }).click()]);
+    expect(pdf.suggestedFilename()).toBe('mega-saldao.pdf');
+    await pdf.saveAs('../test-results/encarte.pdf');
+    await expect(page.getByText('PDF do encarte baixado.')).toBeVisible();
   });
 
   test('venda simples com Pix', async () => {

@@ -2,7 +2,7 @@ import 'server-only';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
 import * as A from '@gct/app';
-import { AppError, PERMISSIONS, ROLE_LABELS, ROLES } from '@gct/shared';
+import { AppError, HEX_COLOR, PERMISSIONS, ROLE_LABELS, ROLES } from '@gct/shared';
 import { clientIp, fileResponse, getSession, queryObject, rateLimit, TENANT_COOKIE, type RouteDef } from './http';
 
 const p = A.parse;
@@ -98,6 +98,21 @@ export const routes: RouteDef[] = [
                 })
                 .nullable()
                 .optional(),
+              brandColors: z
+                .object({ primary: z.string().regex(HEX_COLOR), secondary: z.string().regex(HEX_COLOR), accent: z.string().regex(HEX_COLOR) })
+                .nullable()
+                .optional(),
+              flyer: z
+                .object({
+                  title: z.string().trim().max(40),
+                  subtitle: z.string().trim().max(60),
+                  footer: z.string().trim().max(160),
+                  validity: z.string().trim().max(80),
+                  cardSurchargeBps: z.number().int().min(0).max(3000),
+                  cardInstallments: z.number().int().min(0).max(24),
+                })
+                .nullable()
+                .optional(),
             })
             .optional(),
         }),
@@ -106,6 +121,21 @@ export const routes: RouteDef[] = [
       await A.updateTenantProfile(deps, actor, { ...input, email: input.email === undefined ? undefined : input.email || null });
     },
   },
+  {
+    method: 'POST', path: 'tenant/logo', rate: { max: 30, windowMs: 3600_000 },
+    handler: async ({ deps, actor, req }) => {
+      const ct = req.headers.get('content-type') ?? '';
+      if (!ct.startsWith('multipart/form-data')) throw new AppError('validation_failed', 'Envie a logo como multipart/form-data.');
+      const len = Number(req.headers.get('content-length') ?? 0);
+      if (len > 6 * 1024 * 1024) throw new AppError('validation_failed', 'Imagem deve ter até 5 MB.');
+      const form = await req.formData();
+      const file = form.get('file');
+      if (!(file instanceof File)) throw new AppError('validation_failed', 'Arquivo ausente.');
+      return A.setBrandLogo(deps, actor, Buffer.from(await file.arrayBuffer()), file.name);
+    },
+  },
+  { method: 'DELETE', path: 'tenant/logo', handler: ({ deps, actor }) => A.removeBrandLogo(deps, actor) },
+  { method: 'GET', path: 'flyer/products', handler: ({ deps, actor }) => A.listFlyerProducts(deps, actor) },
   { method: 'POST', path: 'tenant/onboarding/dismiss', handler: ({ deps, actor }) => A.dismissOnboarding(deps, actor) },
   {
     method: 'GET', path: 'members',

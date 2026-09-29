@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { ExternalLink, Monitor, Smartphone, Trash2 } from 'lucide-react';
 import { ProductPicker } from '@/components/ops/product-picker';
+import { FlyerStudio } from '@/components/flyer/flyer-studio';
 import { CatalogView } from '@/components/storefront/catalog-view';
 import { Badge, Button, Card, cx, ErrorState, Field, FormError, Input, LoadingBlock, NoPermission, PageHeader, Tabs, Textarea } from '@/components/ui';
 import { useToast } from '@/components/toast';
@@ -19,7 +20,7 @@ export default function CatalogAdmin() {
   const me = useMe();
   const qc = useQueryClient();
   const toast = useToast();
-  const [tab, setTab] = useState<'setup' | 'orders' | 'analytics'>('setup');
+  const [tab, setTab] = useState<'setup' | 'flyer' | 'orders' | 'analytics'>('setup');
   const q = useQuery({ queryKey: ['catalog'], queryFn: () => api<Admin>('catalog'), enabled: can('catalog.manage') });
   const orders = useQuery({ queryKey: ['catalog-orders'], queryFn: () => api<Order[]>('catalog/orders'), enabled: tab === 'orders' });
   const analytics = useQuery({ queryKey: ['catalog-analytics'], queryFn: () => api<{ byKind: { kind: string; n: number }[]; topProducts: { name: string; views: number }[]; note: string }>('catalog/analytics'), enabled: tab === 'analytics', retry: false });
@@ -53,7 +54,8 @@ export default function CatalogAdmin() {
         {c?.published && <a className="flex items-center gap-1 text-sm text-primary-soft" href={`/c/${c.slug}`} target="_blank" rel="noopener"><ExternalLink className="size-4" />Abrir</a>}
         {c && <Button variant={c.published ? 'danger' : 'primary'} onClick={async () => { try { await api('catalog/publish', { body: { published: !c.published } }); qc.invalidateQueries({ queryKey: ['catalog'] }); toast(c.published ? 'Catálogo despublicado.' : 'Catálogo publicado.'); } catch (e) { setError(e); } }}>{c.published ? 'Despublicar' : 'Publicar'}</Button>}
       </>} />
-      <div className="mb-4"><Tabs value={tab} onChange={setTab} options={[{ value: 'setup', label: 'Configuração' }, { value: 'orders', label: 'Pedidos recebidos' }, { value: 'analytics', label: 'Analytics' }]} /></div>
+      <div className="mb-4"><Tabs value={tab} onChange={setTab} options={[{ value: 'setup', label: 'Configuração' }, { value: 'flyer', label: 'Encarte digital' }, { value: 'orders', label: 'Pedidos recebidos' }, { value: 'analytics', label: 'Analytics' }]} /></div>
+      {tab === 'flyer' && <FlyerStudio />}
       {tab === 'setup' && (
         <div className="grid gap-4 xl:grid-cols-2">
           <div className="flex flex-col gap-4">
