@@ -11,10 +11,18 @@ async function post(r: APIRequestContext, path: string, data: unknown, key = tru
   return res.json();
 }
 
-/** Foto sintética de produto (fundo transparente, forma colorida). */
-function foto(cor: string, forma: 'circle' | 'rect') {
-  const shape = forma === 'circle' ? `<circle cx="200" cy="200" r="150" fill="${cor}"/><circle cx="200" cy="200" r="60" fill="#fff" opacity=".5"/>` : `<rect x="90" y="40" width="220" height="320" rx="36" fill="${cor}"/><rect x="110" y="70" width="180" height="250" rx="14" fill="#111827"/>`;
-  return sharp(Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400">${shape}</svg>`)).png().toBuffer();
+/**
+ * Foto sintética parecida com foto de loja: produto pequeno no meio de um fundo branco/cinza (JPEG),
+ * com margem grande. `complexo` = fundo com listras coloridas (não deve ser removido).
+ */
+function foto(cor: string, forma: 'circle' | 'rect', fundo: string, complexo = false) {
+  const shape = forma === 'circle'
+    ? `<circle cx="400" cy="400" r="150" fill="${cor}"/><circle cx="400" cy="400" r="60" fill="#ffffff"/>`
+    : `<rect x="310" y="230" width="180" height="320" rx="30" fill="${cor}"/><rect x="330" y="260" width="140" height="240" rx="12" fill="#111827"/>`;
+  const bg = complexo
+    ? Array.from({ length: 16 }, (_, i) => `<rect x="${i * 50}" y="0" width="50" height="800" fill="hsl(${i * 23} 70% 55%)"/>`).join('')
+    : `<rect width="800" height="800" fill="${fundo}"/>`;
+  return sharp(Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800">${bg}${shape}</svg>`)).jpeg({ quality: 85 }).toBuffer();
 }
 
 test('encarte com 17 produtos com foto', async ({ browser }) => {
@@ -30,7 +38,7 @@ test('encarte com 17 produtos com foto', async ({ browser }) => {
   const items: { variantId: string; quantity: number; unitCostCents: string }[] = [];
   for (const [i, nome] of nomes.entries()) {
     const p = await post(r, 'products', { name: nome, brand: i % 3 === 0 ? 'Marca Demo' : undefined, description: i === 0 ? 'Bluetooth 5.3\nCase com LED\nAté 20 h de bateria' : undefined, variants: [{ sku: `ENC-${run}-${i}`, retailPriceCents: String(1999 + i * 2500) }] }, false);
-    const res = await r.post(`/api/v1/products/${p.id}/images`, { headers: H, multipart: { file: { name: 'foto.png', mimeType: 'image/png', buffer: await foto(cores[i % cores.length]!, i % 2 ? 'rect' : 'circle') } } });
+    const res = await r.post(`/api/v1/products/${p.id}/images`, { headers: H, multipart: { file: { name: 'foto.jpg', mimeType: 'image/jpeg', buffer: await foto(cores[i % cores.length]!, i % 2 ? 'rect' : 'circle', i % 4 === 3 ? '#f2f2f2' : '#ffffff', i === 6) } } });
     expect(res.ok(), await res.text()).toBeTruthy();
     const v = (await (await r.get(`/api/v1/products/${p.id}`)).json()).variants[0].id;
     items.push({ variantId: v, quantity: 3, unitCostCents: '1000' });

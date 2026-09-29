@@ -13,6 +13,7 @@ import { api, ApiError } from '@/lib/client/api';
 import { brl } from '@/lib/client/format';
 import { useCan } from '@/lib/client/session';
 import { FlyerPageView, PAGE_H, PAGE_W, themeFrom, type FlyerItem } from './flyer-page';
+import { productCutout } from './cutout';
 import { dominantColors } from './logo-colors';
 
 interface Tenant {
@@ -46,6 +47,7 @@ export function FlyerStudio() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [featured, setFeatured] = useState<Set<string>>(new Set());
   const [onlyPhoto, setOnlyPhoto] = useState(false);
+  const [cutout, setCutout] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState<'' | 'png' | 'pdf' | 'share' | 'logo' | 'save'>('');
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -107,6 +109,9 @@ export function FlyerStudio() {
   };
 
   const render = async (kind: 'png' | 'jpeg') => {
+    // Espera os recortes das fotos e a pintura da tela antes de capturar.
+    if (cutout) await Promise.all(chosen.filter((p) => p.imageId).map((p) => productCutout(`/api/v1/attachments/${p.imageId}`)));
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     const { domToPng, domToJpeg } = await import('modern-screenshot');
     const out: string[] = [];
     for (const node of pageRefs.current.slice(0, pages.length)) {
@@ -205,6 +210,8 @@ export function FlyerStudio() {
           </div>
         }>
           <label className="mb-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={onlyPhoto} onChange={(e) => setOnlyPhoto(e.target.checked)} />Somente produtos com foto</label>
+          <label className="mb-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={cutout} onChange={(e) => setCutout(e.target.checked)} />Remover fundo das fotos</label>
+          <p className="mb-2 text-xs text-muted">Tira fundos lisos (branco, cinza ou cor única) e corta as margens. Fotos com fundo cheio de detalhes ficam como estão.</p>
           <ul className="flex max-h-[28rem] flex-col divide-y divide-line overflow-y-auto">
             {list.map((p) => (
               <li key={p.id} className="flex items-center gap-3 py-2">
@@ -238,7 +245,7 @@ export function FlyerStudio() {
             {pages.map((pg, i) => (
               <div key={i} style={{ width: PAGE_W * PREVIEW_SCALE, height: PAGE_H * PREVIEW_SCALE }} className="shrink-0 overflow-hidden rounded-xl shadow-lg">
                 <div style={{ transform: `scale(${PREVIEW_SCALE})`, transformOrigin: 'top left', width: PAGE_W, height: PAGE_H }}>
-                  <FlyerPageView ref={(el) => { pageRefs.current[i] = el; }} page={pg} index={i} total={pages.length} theme={theme} settings={settings} logoUrl={logoUrl} companyName={tenant.data!.name} />
+                  <FlyerPageView ref={(el) => { pageRefs.current[i] = el; }} page={pg} index={i} total={pages.length} theme={theme} settings={settings} logoUrl={logoUrl} companyName={tenant.data!.name} cutout={cutout} />
                 </div>
               </div>
             ))}

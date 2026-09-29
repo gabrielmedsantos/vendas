@@ -6,3 +6,4 @@ export * from './dates';
 export * from './text';
 export * from './listing';
 export * from './flyer';
+export * from './cutout';

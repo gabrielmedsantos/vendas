@@ -1,6 +1,7 @@
 'use client';
 
-import { forwardRef, type CSSProperties } from 'react';
+import { forwardRef, useEffect, useState, type CSSProperties } from 'react';
+import { productCutout } from './cutout';
 import { cardPrice, formatBRL, readableOn, shade, splitPrice, type BrandColors, type FlyerPage as Page, type FlyerSettings } from '@gct/shared';
 
 export const PAGE_W = 1080;
@@ -63,46 +64,77 @@ function Price({ cents, t, size, s }: { cents: string; t: FlyerTheme; size: numb
   );
 }
 
-function Photo({ it, big }: { it: FlyerItem; big?: boolean }) {
-  return it.imageId
-    ? <img src={`/api/v1/attachments/${it.imageId}`} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-    : <div style={{ width: '70%', aspectRatio: '1', borderRadius: 24, background: '#eef0f6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9aa0b4', fontSize: big ? 28 : 18, fontWeight: 700, textAlign: 'center', padding: 12 }}>{it.brand ?? 'Foto em breve'}</div>;
+type CardSize = 'wide' | 'big' | 'medium' | 'small';
+const PRICE_SIZE: Record<CardSize, number> = { wide: 110, big: 96, medium: 72, small: 58 };
+
+/** Foto do produto; com `cutout`, usa a versão sem fundo liso e sem margens. */
+function Photo({ it, cutout, big }: { it: FlyerItem; cutout: boolean; big?: boolean }) {
+  const url = it.imageId ? `/api/v1/attachments/${it.imageId}` : null;
+  const [src, setSrc] = useState<string | null>(url && !cutout ? url : null);
+  useEffect(() => {
+    if (!url) return;
+    if (!cutout) { setSrc(url); return; }
+    let alive = true;
+    productCutout(url).then((u) => { if (alive) setSrc(u); });
+    return () => { alive = false; };
+  }, [url, cutout]);
+  if (!url) return <div style={{ width: '62%', aspectRatio: '1', borderRadius: 24, background: '#eef0f6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9aa0b4', fontSize: big ? 28 : 18, fontWeight: 700, textAlign: 'center', padding: 12 }}>{it.brand ?? 'Foto em breve'}</div>;
+  if (!src) return null;
+  return <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', filter: cutout ? 'drop-shadow(0 14px 14px rgba(0,0,0,.28))' : undefined }} />;
 }
 
-function Info({ it, t, big }: { it: FlyerItem; t: FlyerTheme; big?: boolean }) {
-  const b = bullets(it.description);
+/** Nome sobre a foto: contorno branco garante leitura mesmo encostando no produto. */
+function Name({ it, t, size }: { it: FlyerItem; t: FlyerTheme; size: CardSize }) {
+  const long = it.name.length > (size === 'small' ? 30 : 42);
+  const fs = { wide: long ? 46 : 56, big: long ? 36 : 44, medium: long ? 26 : 32, small: long ? 21 : 25 }[size];
+  const b = size === 'wide' ? bullets(it.description) : [];
   return (
     <div style={{ minWidth: 0 }}>
-      <div style={{ fontSize: big ? 44 : 26, fontWeight: 900, color: t.ink, lineHeight: 1.05, letterSpacing: -0.5, display: '-webkit-box', WebkitLineClamp: big ? 3 : 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{it.name}</div>
-      {it.brand && <div style={{ fontSize: big ? 20 : 14, color: t.muted, fontWeight: 600, marginTop: 4 }}>{it.brand}</div>}
-      {big && b.length > 0 && <ul style={{ margin: '10px 0 0', padding: 0, listStyle: 'none', fontSize: 20, color: t.muted, lineHeight: 1.35 }}>{b.map((x) => <li key={x}>• {x}</li>)}</ul>}
+      <div style={{ fontSize: fs, fontWeight: 900, color: t.ink, lineHeight: 1.02, letterSpacing: -0.5, WebkitTextStroke: `${Math.max(4, fs * 0.16)}px #fff`, paintOrder: 'stroke fill', display: '-webkit-box', WebkitLineClamp: size === 'wide' ? 3 : 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{it.name}</div>
+      {it.brand && <div style={{ fontSize: Math.max(14, fs * 0.42), color: t.muted, fontWeight: 700, marginTop: 4 }}>{it.brand}</div>}
+      {b.length > 0 && <ul style={{ margin: '8px 0 0', padding: 0, listStyle: 'none', fontSize: Math.max(17, fs * 0.42), color: t.muted, fontWeight: 600, lineHeight: 1.3 }}>{b.map((x) => <li key={x}>• {x}</li>)}</ul>}
     </div>
   );
 }
 
-/** Card de produto; `wide` = destaque único (foto à esquerda, texto e preço à direita). */
-function Card({ it, t, s, big, wide }: { it: FlyerItem; t: FlyerTheme; s: FlyerSettings; big?: boolean; wide?: boolean }) {
-  const box: CSSProperties = { background: t.card, borderRadius: big ? 44 : 32, padding: big ? 28 : 18, display: 'flex', flexDirection: wide ? 'row' : 'column', gap: wide ? 28 : 0, overflow: 'hidden', boxShadow: `0 10px 0 ${t.bgDark}`, minHeight: 0 };
-  if (wide) {
+/**
+ * Card no estilo encarte: a foto ocupa quase todo o card; nome e selo de preço ficam por cima,
+ * no rodapé do card. `wide` = foto à esquerda, texto e preço à direita.
+ */
+function Card({ it, t, s, size, cutout }: { it: FlyerItem; t: FlyerTheme; s: FlyerSettings; size: CardSize; cutout: boolean }) {
+  const r = { wide: 44, big: 40, medium: 34, small: 30 }[size];
+  const pad = { wide: 28, big: 22, medium: 16, small: 14 }[size];
+  const box: CSSProperties = { position: 'relative', background: t.card, borderRadius: r, overflow: 'hidden', boxShadow: `0 10px 0 ${t.bgDark}`, minHeight: 0, minWidth: 0 };
+  if (size === 'wide') {
     return (
-      <div style={box}>
-        <div style={{ flex: '0 0 52%', minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Photo it={it} big /></div>
+      <div style={{ ...box, display: 'flex', gap: 24, padding: pad }}>
+        <div style={{ flex: '0 0 56%', minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Photo it={it} cutout={cutout} big /></div>
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 28 }}>
-          <Info it={it} t={t} big />
-          <Price cents={it.retailPriceCents} t={t} size={104} s={s} />
+          <Name it={it} t={t} size="wide" />
+          <Price cents={it.retailPriceCents} t={t} size={PRICE_SIZE.wide} s={s} />
         </div>
       </div>
     );
   }
+  // Foto ocupa o card até a faixa do nome; o selo de preço fica por cima da parte de baixo da foto.
+  const nameZone = { big: '19%', medium: '24%', small: '25%' }[size];
   return (
     <div style={box}>
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Photo it={it} big={big} /></div>
-      <div style={{ marginTop: 10 }}><Info it={it} t={t} big={big} /></div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: big ? 12 : 8 }}>
-        <Price cents={it.retailPriceCents} t={t} size={big ? 96 : 58} s={s} />
+      <div style={{ position: 'absolute', top: pad, left: pad, right: pad, bottom: nameZone, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Photo it={it} cutout={cutout} big={size === 'big'} /></div>
+      <div style={{ position: 'absolute', left: pad, right: pad, bottom: pad * 0.8, display: 'flex', flexDirection: 'column', gap: size === 'small' ? 4 : 8 }}>
+        <div style={{ alignSelf: 'flex-end' }}><Price cents={it.retailPriceCents} t={t} size={PRICE_SIZE[size]} s={s} /></div>
+        <Name it={it} t={t} size={size} />
       </div>
     </div>
   );
+}
+
+/** Grade de uma página interna conforme a quantidade: poucos produtos ganham cards maiores. */
+function gridFor(n: number): { cols: number; rows: number; size: CardSize } {
+  if (n <= 3) return { cols: 1, rows: Math.max(n, 1), size: 'wide' };
+  if (n === 4) return { cols: 2, rows: 2, size: 'big' };
+  if (n <= 6) return { cols: 2, rows: 3, size: 'medium' };
+  return { cols: 3, rows: 3, size: 'small' };
 }
 
 function Waves({ color }: { color: string }) {
@@ -130,10 +162,12 @@ export interface FlyerPageProps {
   settings: FlyerSettings;
   logoUrl: string | null;
   companyName: string;
+  /** Remove fundo liso e margens das fotos. */
+  cutout?: boolean;
 }
 
 /** Uma página do encarte em 1080×1350 (4:5, formato de post e status). */
-export const FlyerPageView = forwardRef<HTMLDivElement, FlyerPageProps>(function FlyerPageView({ page, index, total, theme: t, settings: s, logoUrl, companyName }, ref) {
+export const FlyerPageView = forwardRef<HTMLDivElement, FlyerPageProps>(function FlyerPageView({ page, index, total, theme: t, settings: s, logoUrl, companyName, cutout = true }, ref) {
   const title = s.title.trim() || companyName;
   const titleSize = page.first ? (title.length <= 10 ? 150 : title.length <= 16 ? 118 : 92) : 64;
   const logo = (h: number) => logoUrl
@@ -156,15 +190,23 @@ export const FlyerPageView = forwardRef<HTMLDivElement, FlyerPageProps>(function
           </div>
         )}
         {page.featured.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${page.featured.length}, 1fr)`, gap: 24, height: page.items.length ? 520 : 860 }}>
-            {page.featured.map((it) => <Card key={it.id} it={it} t={t} s={s} big wide={page.featured.length === 1} />)}
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${page.featured.length}, minmax(0, 1fr))`, gap: 24, height: page.items.length ? 520 : 860 }}>
+            {page.featured.map((it) => <Card key={it.id} it={it} t={t} s={s} size={page.featured.length === 1 ? 'wide' : 'big'} cutout={cutout} />)}
           </div>
         )}
-        {page.items.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gridAutoRows: page.first ? 330 : 'minmax(0, 1fr)', gap: 22, flex: page.first ? undefined : 1, minHeight: 0, alignContent: 'start', ...(page.first ? {} : { gridTemplateRows: `repeat(${Math.ceil(page.items.length / 3) < 3 ? 3 : Math.ceil(page.items.length / 3)}, minmax(0, 1fr))` }) }}>
-            {page.items.map((it) => <Card key={it.id} it={it} t={t} s={s} />)}
+        {page.first && page.items.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(page.items.length, 1)}, minmax(0, 1fr))`, height: 340, gap: 22 }}>
+            {page.items.map((it) => <Card key={it.id} it={it} t={t} s={s} size={page.items.length === 1 ? 'big' : page.items.length === 2 ? 'medium' : 'small'} cutout={cutout} />)}
           </div>
         )}
+        {!page.first && page.items.length > 0 && (() => {
+          const g = gridFor(page.items.length);
+          return (
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${g.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${g.rows}, minmax(0, 1fr))`, gap: 22, flex: 1, minHeight: 0 }}>
+              {page.items.map((it) => <Card key={it.id} it={it} t={t} s={s} size={g.size} cutout={cutout} />)}
+            </div>
+          );
+        })()}
       </div>
       <div style={{ position: 'relative', marginTop: 24, background: t.bgDark, color: t.footerInk, height: 84, padding: '0 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24, fontSize: 24, fontWeight: 700 }}>
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.footer}</span>
