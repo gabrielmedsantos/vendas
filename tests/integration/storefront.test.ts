@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import sharp from 'sharp';
 import { withTenant } from '@gct/db';
 import {
-  addProductImage, createPublicOrder, getPublicCatalog, listPublicOrders, readPublicImage, reservePublicOrder, saveCatalog, setCatalogItems, setCatalogPublished,
+  addProductImage, createPublicOrder, getCatalogAdmin, getPublicCatalog, listPublicOrders, readPublicImage, reservePublicOrder, saveCatalog, setCatalogItems, setCatalogPublished,
   zCatalog, type Actor,
 } from '@gct/app';
 import { closeDeps, createTenant, makeParty, makeProduct, stockUp, testDeps, type TenantFixture } from './helpers';
@@ -57,6 +57,18 @@ describe('catálogo público', () => {
     expect(meta.format).toBe('webp');
     expect(meta.exif).toBeUndefined();
     await expect(readPublicImage(deps, slug, randomUUID())).rejects.toMatchObject({ code: 'not_found' });
+  });
+
+  it('foto adicionada depois de publicar aparece no catálogo público na hora; produto fora do catálogo não', async () => {
+    const png = await sharp({ create: { width: 32, height: 32, channels: 3, background: '#22c55e' } }).png().toBuffer();
+    const nova = (await addProductImage(deps, actor, phone.productId, png, 'nova.png')).id;
+    const cat = await getPublicCatalog(deps, slug);
+    expect(cat.items.find((i) => i.variantId === phone.variantId)!.imageIds).toContain(nova);
+    await expect(readPublicImage(deps, slug, nova)).resolves.toBeTruthy();
+    const oculta = (await addProductImage(deps, actor, hidden.productId, png, 'oculta.png')).id;
+    await expect(readPublicImage(deps, slug, oculta)).rejects.toMatchObject({ code: 'not_found' });
+    const admin = await getCatalogAdmin(deps, actor);
+    expect(admin.items.find((i) => i.variant_id === phone.variantId)!.image_id).toBe(imageId);
   });
 
   it('pedido público fica pendente, com preço congelado e sem reserva automática', async () => {

@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import sharp from 'sharp';
+import { sql } from '@gct/db';
 import { AppError, conflict, invalid, notFound } from '@gct/shared';
 import { audit, can, requirePermission, requireWritable, tx, type Actor, type AppDeps } from './core';
 import { checkLimit } from './billing';
@@ -49,6 +50,10 @@ export async function addProductImage(deps: AppDeps, actor: Actor, productId: st
       .returning('id')
       .executeTakeFirstOrThrow();
     await trx.insertInto('product_images').values({ tenant_id: actor.tenantId, product_id: productId, attachment_id: att.id, position: Number(count.n) }).execute();
+    // Produto já em catálogo publicado: a foto nova aparece no catálogo público na hora.
+    await sql`update attachments a set is_public = true where a.id = ${att.id} and exists (
+      select 1 from product_variants v join catalog_items ci on ci.variant_id = v.id join catalogs c on c.id = ci.catalog_id and c.published
+      where v.product_id = ${productId})`.execute(trx);
     await audit(trx, actor, 'product.image_added', 'product', productId, { attachmentId: att.id });
     return { id: att.id };
   });

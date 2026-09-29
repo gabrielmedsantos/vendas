@@ -34,8 +34,8 @@ export function CatalogView({ data, preview, onEvent, onOrder }: { data: PublicC
         {data.items.map((i) => (
           <article key={i.variantId} className="flex flex-col overflow-hidden rounded-2xl border border-line bg-surface" onMouseEnter={() => onEvent?.('product_view', i.variantId)}>
             <div className="grid aspect-square place-items-center bg-surface-2">
-              {i.imageIds[0] && !preview
-                ? <img src={`/api/public/catalog/${data.slug}/images/${i.imageIds[0]}`} alt={i.name} className="size-full object-cover" loading="lazy" />
+              {i.imageIds[0]
+                ? <img src={preview ? `/api/v1/attachments/${i.imageIds[0]}` : `/api/public/catalog/${data.slug}/images/${i.imageIds[0]}`} alt={i.name} className="size-full object-cover" loading="lazy" />
                 : <Package className="size-8 text-muted" aria-hidden />}
             </div>
             <div className="flex flex-1 flex-col gap-1 p-3">

@@ -23,12 +23,15 @@ export async function getCatalogAdmin(deps: AppDeps, actor: Actor) {
   requirePermission(actor, 'catalog.manage');
   return tx(deps, actor, async (trx) => {
     const catalog = await trx.selectFrom('catalogs').selectAll().orderBy('created_at').executeTakeFirst();
+    // Garante que fotos adicionadas depois da publicação apareçam no catálogo público.
+    if (catalog?.published) await syncPublicImages(trx);
     const items = catalog
       ? await trx
           .selectFrom('catalog_items as ci')
           .innerJoin('product_variants as v', 'v.id', 'ci.variant_id')
           .innerJoin('products as p', 'p.id', 'v.product_id')
           .select(['ci.variant_id', 'ci.position', 'p.name', 'v.sku', 'v.label', 'v.retail_price_cents', 'p.status'])
+          .select(sql<string | null>`(select pi.attachment_id from product_images pi where pi.product_id = p.id order by pi.position limit 1)`.as('image_id'))
           .where('ci.catalog_id', '=', catalog.id)
           .orderBy('ci.position')
           .execute()

@@ -12,7 +12,7 @@ import { api, ApiError } from '@/lib/client/api';
 import { brl, dateTimeBR, STATUS_LABEL } from '@/lib/client/format';
 import { useCan, useMe } from '@/lib/client/session';
 
-interface Admin { catalog: null | { id: string; slug: string; title: string; description: string | null; theme: { accentColor?: string }; contactWhatsapp: string | null; showPrices: boolean; published: boolean; acceptOrders: boolean }; items: { variantId: string; name: string; sku: string; label: string; retailPriceCents: string; status: string }[] }
+interface Admin { catalog: null | { id: string; slug: string; title: string; description: string | null; theme: { accentColor?: string }; contactWhatsapp: string | null; showPrices: boolean; published: boolean; acceptOrders: boolean }; items: { variantId: string; name: string; sku: string; label: string; retailPriceCents: string; status: string; imageId?: string | null }[] }
 interface Order { id: string; number: string; contactName: string; contactPhone: string; notes: string | null; status: string; totalCents: string; reservationExpiresAt: string | null; createdAt: string; items: { description: string; quantity: number; unitPriceCents: string }[] }
 
 export default function CatalogAdmin() {
@@ -81,7 +81,7 @@ export default function CatalogAdmin() {
           </div>
           <Card title="Prévia" action={<div className="flex gap-1"><Button size="sm" variant={device === 'desktop' ? 'primary' : 'secondary'} onClick={() => setDevice('desktop')}><Monitor className="size-3.5" />Desktop</Button><Button size="sm" variant={device === 'mobile' ? 'primary' : 'secondary'} onClick={() => setDevice('mobile')}><Smartphone className="size-3.5" />Celular</Button></div>}>
             <div className={cx('mx-auto h-[640px] overflow-y-auto rounded-2xl border border-line-strong', device === 'mobile' ? 'w-[375px] max-w-full' : 'w-full')}>
-              <CatalogView preview data={{ slug: f.slug, title: f.title || 'Catálogo', description: f.description || null, storeName: me.data?.current?.name ?? '', accentColor: f.accentColor, contactWhatsapp: f.contactWhatsapp || null, showPrices: f.showPrices, acceptOrders: f.acceptOrders, items: items.map((i) => ({ variantId: i.variantId, name: i.name, description: null, brand: null, label: i.label, category: null, priceCents: f.showPrices ? i.retailPriceCents : null, available: true, imageIds: [] })) }} />
+              <CatalogView preview data={{ slug: f.slug, title: f.title || 'Catálogo', description: f.description || null, storeName: me.data?.current?.name ?? '', accentColor: f.accentColor, contactWhatsapp: f.contactWhatsapp || null, showPrices: f.showPrices, acceptOrders: f.acceptOrders, items: items.map((i) => ({ variantId: i.variantId, name: i.name, description: null, brand: null, label: i.label, category: null, priceCents: f.showPrices ? i.retailPriceCents : null, available: true, imageIds: i.imageId ? [i.imageId] : [] })) }} />
             </div>
           </Card>
         </div>
