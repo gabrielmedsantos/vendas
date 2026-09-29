@@ -84,6 +84,7 @@ export function ListingModal({ product, open, onClose }: { product: ListingProdu
               </Select>
             </Field>
             <Field label="Entrega" htmlFor="an-del" help="Deixe vazio para não mencionar."><Input id="an-del" maxLength={160} value={o.delivery} onChange={(e) => set('delivery', e.target.value)} /></Field>
+            <div className="sm:col-span-2"><Field label="Frase de confiança" htmlFor="an-hl" help="Deixe vazio para não mostrar."><Input id="an-hl" maxLength={160} value={o.highlight} onChange={(e) => set('highlight', e.target.value)} /></Field></div>
             <div className="sm:col-span-2"><Field label="Observação no fim (opcional)" htmlFor="an-extra"><Input id="an-extra" maxLength={500} value={o.extra} onChange={(e) => set('extra', e.target.value)} /></Field></div>
           </div>
           {can('settings.manage') && (
@@ -91,12 +92,12 @@ export function ListingModal({ product, open, onClose }: { product: ListingProdu
               <Button variant="quiet" loading={saving} onClick={async () => {
                 setSaving(true); setError(null);
                 try {
-                  await api('tenant', { method: 'PUT', body: { settings: { listing: { condition: o.condition, warrantyMonths: o.warrantyMonths, delivery: o.delivery, cardInstallments: o.cardInstallments, extra: o.extra } } } });
+                  await api('tenant', { method: 'PUT', body: { settings: { listing: { condition: o.condition, warrantyMonths: o.warrantyMonths, delivery: o.delivery, cardInstallments: o.cardInstallments, extra: o.extra, highlight: o.highlight } } } });
                   await qc.invalidateQueries({ queryKey: ['tenant'] });
                   toast('Padrão de anúncio salvo para a empresa.');
                 } catch (e) { setError(e); } finally { setSaving(false); }
               }}>Salvar estas opções como padrão</Button>
-              <span>Condição, garantia, cartão, entrega e observação.</span>
+              <span>Condição, garantia, cartão, entrega, frase de confiança e observação.</span>
             </div>
           )}
           <FormError error={error} />

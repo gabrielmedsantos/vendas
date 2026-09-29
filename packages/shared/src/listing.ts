@@ -15,9 +15,11 @@ export interface ListingDefaults {
   cardInstallments: number;
   /** Observação livre no fim do anúncio completo. */
   extra: string;
+  /** Frase de confiança (ex.: "Compra segura e produtos originais"). Vazio = não mostra. */
+  highlight: string;
 }
 
-export const LISTING_DEFAULTS: ListingDefaults = { condition: 'new', warrantyMonths: 3, delivery: '', cardInstallments: 12, extra: '' };
+export const LISTING_DEFAULTS: ListingDefaults = { condition: 'new', warrantyMonths: 3, delivery: '', cardInstallments: 12, extra: '', highlight: 'Compra segura e produtos originais' };
 
 /** Padrões efetivos: o que a empresa salvou, completado pelo padrão do sistema e pela cidade da empresa. */
 export function listingDefaults(saved: Partial<ListingDefaults> | null | undefined, city?: string | null): ListingDefaults {
@@ -68,34 +70,41 @@ export function buildListing(i: ListingInput): Listing {
   if (title.length > TITLE_MAX) title = `${base} - ${cond}`;
   if (title.length > TITLE_MAX) title = `${title.slice(0, TITLE_MAX - 1).trimEnd()}…`;
 
-  const condLine = i.condition === 'new' ? '✅ Produto novo' : `✅ Seminovo${notes ? `: ${notes}` : ' em ótimo estado'}`;
+  const highlight = clean(i.highlight);
+  const header = `✨ ${base} – ${cond} ✨`;
+  const condLine = i.condition === 'new' ? '📦 Produto novo' : `♻️ Seminovo${notes ? `: ${notes}` : ' em ótimo estado'}`;
   const checks = [
     condLine,
-    warranty > 0 ? `✅ Garantia de ${months(warranty)}` : '',
-    delivery ? `✅ ${delivery}` : '',
-    cards > 1 ? `✅ Cartão em até ${cards}x` : cards === 1 ? '✅ Aceitamos cartão' : '',
+    warranty > 0 ? `🛡️ Garantia de ${months(warranty)}` : '',
+    delivery ? `🛵 ${delivery}` : '',
+    cards > 1 ? `💳 Cartão em até ${cards}x` : cards === 1 ? '💳 Aceitamos cartão' : '',
+    highlight ? `🔒 ${highlight}` : '',
   ].filter(Boolean);
-  const short = [`${base} - ${cond}`, '', ...checks, '', `💰 ${price}`, 'Chama no chat!'].join('\n');
+  const short = [header, '', ...checks, '', `💰 ${price}`, '📲 Chama no chat!'].join('\n');
 
-  const full: string[] = [`${base} - ${cond}`, ''];
+  const dot = (s: string) => (/[.!?]$/.test(s) ? s : `${s}.`);
+  const full: string[] = [header, ''];
   if (clean(i.description)) full.push(clean(i.description), '');
   const specs = [
-    brand ? `Marca: ${brand}` : '',
-    variant ? `Modelo/variação: ${variant}` : '',
-    i.condition === 'new' ? 'Condição: novo' : `Condição: seminovo${notes ? ` (${notes})` : ', em ótimo estado'}`,
+    brand ? `▪️ Marca: ${brand}` : '',
+    variant ? `▪️ Modelo/variação: ${variant}` : '',
+    i.condition === 'new' ? '▪️ Condição: novo' : `▪️ Condição: seminovo${notes ? ` (${notes})` : ', em ótimo estado'}`,
   ].filter(Boolean);
-  full.push(...specs, '');
+  full.push('📋 Detalhes', ...specs, '');
   if (warranty > 0) {
     full.push(
       '🛡️ Garantia',
-      `${months(warranty)} de garantia da loja contra defeitos de funcionamento do aparelho. A garantia não cobre mau uso (quedas, tela ou traseira quebrada, contato com líquidos, aparelho aberto ou reparado por terceiros).`,
+      `${months(warranty)} de garantia da loja contra defeitos de funcionamento do aparelho.`,
+      '⚠️ Não cobre mau uso (quedas, tela ou traseira quebrada, contato com líquidos, aparelho aberto ou reparado por terceiros).',
       '',
     );
   }
-  if (delivery) full.push('🚚 Entrega', delivery.endsWith('.') ? delivery : `${delivery}.`, '');
-  full.push('💳 Pagamento', `${payment(cards)}.`, '', `💰 Valor: ${price}`, '');
+  if (delivery) full.push('🛵 Entrega', dot(delivery), '');
+  full.push('💳 Pagamento', `${payment(cards)}.`, '');
+  if (highlight) full.push(`🔒 ${dot(highlight)}`, '');
+  full.push(`💰 Valor: ${price}`, '');
   if (clean(i.extra)) full.push(clean(i.extra), '');
-  full.push('Chama no chat que tiro suas dúvidas!');
+  full.push('📲 Chama no chat que tiro suas dúvidas!');
 
   return { title, short, full: full.join('\n').trim() };
 }

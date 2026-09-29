@@ -94,6 +94,7 @@ export const routes: RouteDef[] = [
                   delivery: z.string().trim().max(160),
                   cardInstallments: z.number().int().min(0).max(24),
                   extra: z.string().trim().max(500),
+                  highlight: z.string().trim().max(160).optional(),
                 })
                 .nullable()
                 .optional(),

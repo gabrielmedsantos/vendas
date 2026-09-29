@@ -9,21 +9,24 @@ describe('anúncio', () => {
     expect(d).toMatchObject({ condition: 'new', warrantyMonths: 3, cardInstallments: 12, delivery: 'Entregamos em toda Fortaleza e região' });
     const l = buildListing({ ...base, ...d });
     expect(l.title).toBe('iPhone 13 128 GB Azul - Novo com garantia de 3 meses');
-    expect(l.short).toContain('✅ Produto novo');
-    expect(l.short).toContain('✅ Garantia de 3 meses');
-    expect(l.short).toContain('✅ Entregamos em toda Fortaleza e região');
-    expect(l.short).toContain('✅ Cartão em até 12x');
+    expect(l.short).toContain('📦 Produto novo');
+    expect(l.short).toContain('🛡️ Garantia de 3 meses');
+    expect(l.short).toContain('🛵 Entregamos em toda Fortaleza e região');
+    expect(l.short).toContain('💳 Cartão em até 12x');
     expect(l.short).toContain('R$ 3.299,00');
-    expect(l.full).toContain('A garantia não cobre mau uso');
+    expect(l.full).toContain('Não cobre mau uso');
     expect(l.full).toContain('Pix, dinheiro ou cartão em até 12x.');
-    expect(l.full).toContain('Marca: Apple');
+    expect(l.full).toContain('▪️ Marca: Apple');
+    expect(l.short).toContain('🔒 Compra segura e produtos originais');
+    expect(l.full).toContain('🔒 Compra segura e produtos originais.');
   });
 
   it('seminovo com estado descrito, sem garantia e sem cartão', () => {
     const l = buildListing({ ...base, ...listingDefaults({ delivery: '' }), condition: 'semi_new', conditionNotes: 'bateria 89%, sem marcas', warrantyMonths: 0, cardInstallments: 0 });
     expect(l.title).toBe('iPhone 13 128 GB Azul - Seminovo');
-    expect(l.short).toContain('✅ Seminovo: bateria 89%, sem marcas');
+    expect(l.short).toContain('♻️ Seminovo: bateria 89%, sem marcas');
     expect(l.short).not.toContain('Garantia');
+    expect(listingDefaults({ highlight: '' }).highlight).toBe('');
     expect(l.short).not.toContain('Entreg');
     expect(l.full).toContain('Condição: seminovo (bateria 89%, sem marcas)');
     expect(l.full).toContain('Pix ou dinheiro.');
