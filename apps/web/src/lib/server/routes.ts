@@ -110,6 +110,8 @@ export const routes: RouteDef[] = [
                   validity: z.string().trim().max(80),
                   cardSurchargeBps: z.number().int().min(0).max(3000),
                   cardInstallments: z.number().int().min(0).max(24),
+                  order: z.array(z.string().uuid()).max(500).optional(),
+                  featured: z.array(z.string().uuid()).max(2).optional(),
                 })
                 .nullable()
                 .optional(),

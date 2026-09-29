@@ -2,12 +2,12 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Download, FileDown, ImageOff, ImagePlus, Palette, Share2, Star, Trash2, Wand2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Download, FileDown, GripVertical, ImageOff, ImagePlus, Palette, Share2, Star, Trash2, Wand2 } from 'lucide-react';
 import {
-  BRAND_DEFAULTS, FLYER_DEFAULTS, HEX_COLOR, formatPercentBps, listingDefaults, paginateFlyer, paletteFromColors, parsePercentBps,
+  applyOrder, moveItem, BRAND_DEFAULTS, FLYER_DEFAULTS, HEX_COLOR, formatPercentBps, listingDefaults, paginateFlyer, paletteFromColors, parsePercentBps,
   type BrandColors, type FlyerSettings, type ListingDefaults,
 } from '@gct/shared';
-import { Button, Card, EmptyState, ErrorState, Field, FormError, Input, LinkButton, LoadingBlock, Select } from '@/components/ui';
+import { Button, Card, cx, EmptyState, ErrorState, Field, FormError, Input, LinkButton, LoadingBlock, Select } from '@/components/ui';
 import { useToast } from '@/components/toast';
 import { api, ApiError } from '@/lib/client/api';
 import { brl } from '@/lib/client/format';
@@ -47,6 +47,12 @@ export function FlyerStudio() {
   const [colors, setColors] = useState<BrandColors>(BRAND_DEFAULTS);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [featured, setFeatured] = useState<Set<string>>(new Set());
+  const [order, setOrder] = useState<string[]>([]);
+  const [drag, setDrag] = useState<number | null>(null);
+  const [over, setOver] = useState<number | null>(null);
+  const [orderSaved, setOrderSaved] = useState<'' | 'saving' | 'saved'>('');
+  const orderReady = useRef(false);
+  const orderDirty = useRef(false);
   const [onlyPhoto, setOnlyPhoto] = useState(false);
   const [cutout, setCutout] = useState(true);
   const [error, setError] = useState<unknown>(null);
@@ -62,13 +68,39 @@ export function FlyerStudio() {
     setColors(tenant.data.settings.brandColors ?? BRAND_DEFAULTS);
   }, [tenant.data, s]);
   useEffect(() => {
-    if (products.data) setSelected(new Set(products.data.map((p) => p.id)));
-  }, [products.data]);
+    if (!products.data || !s || orderReady.current) return;
+    const ids = products.data.map((p) => p.id);
+    setSelected(new Set(ids));
+    setOrder(applyOrder(ids, s.order));
+    setFeatured(new Set((s.featured ?? []).filter((id) => ids.includes(id))));
+    orderReady.current = true;
+  }, [products.data, s]);
+
+  // Ordem e destaques são salvos sozinhos (para a empresa) logo depois de mudar.
+  useEffect(() => {
+    // Só salva mudança feita pela pessoa (não a ordem carregada ao abrir a tela).
+    if (!orderReady.current || !orderDirty.current || !tenant.data || !can('settings.manage')) return;
+    const saved = tenant.data.settings.flyer ?? { ...FLYER_DEFAULTS, footer: defaultFooter(tenant.data) };
+    setOrderSaved('saving');
+    const timer = setTimeout(async () => {
+      try {
+        await api('tenant', { method: 'PUT', body: { settings: { flyer: { ...FLYER_DEFAULTS, ...saved, order, featured: [...featured].slice(0, 2) } } } });
+        tenant.data!.settings.flyer = { ...FLYER_DEFAULTS, ...saved, order, featured: [...featured].slice(0, 2) };
+        setOrderSaved('saved');
+      } catch { setOrderSaved(''); }
+    }, 600);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order, featured]);
 
   const logoId = tenant.data?.settings.brandLogoId;
   const logoUrl = logoId ? `/api/v1/attachments/${logoId}` : null;
   const theme = useMemo(() => themeFrom(colors), [colors]);
-  const chosen = useMemo(() => (products.data ?? []).filter((p) => selected.has(p.id) && (!onlyPhoto || p.imageId)), [products.data, selected, onlyPhoto]);
+  const ordered = useMemo(() => {
+    const byId = new Map((products.data ?? []).map((p) => [p.id, p]));
+    return applyOrder([...byId.keys()], order).map((id) => byId.get(id)!);
+  }, [products.data, order]);
+  const chosen = useMemo(() => ordered.filter((p) => selected.has(p.id) && (!onlyPhoto || p.imageId)), [ordered, selected, onlyPhoto]);
   const pages = useMemo(() => paginateFlyer(chosen, (p) => featured.has(p.id)), [chosen, featured]);
 
   if (tenant.isLoading || products.isLoading || (tenant.data && !s)) return <LoadingBlock rows={6} />;
@@ -103,7 +135,7 @@ export function FlyerStudio() {
   const save = async () => {
     setBusy('save'); setError(null);
     try {
-      await api('tenant', { method: 'PUT', body: { settings: { brandColors: colors, flyer: { ...settings, cardSurchargeBps: parsePercentBps(surcharge) ?? 0 } } } });
+      await api('tenant', { method: 'PUT', body: { settings: { brandColors: colors, flyer: { ...settings, cardSurchargeBps: parsePercentBps(surcharge) ?? 0, order: ordered.map((p) => p.id), featured: [...featured].slice(0, 2) } } } });
       await qc.invalidateQueries({ queryKey: ['tenant'] });
       toast('Identidade visual e textos salvos.');
     } catch (e) { setError(e); } finally { setBusy(''); }
@@ -213,9 +245,41 @@ export function FlyerStudio() {
           <label className="mb-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={onlyPhoto} onChange={(e) => setOnlyPhoto(e.target.checked)} />Somente produtos com foto</label>
           <label className="mb-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={cutout} onChange={(e) => setCutout(e.target.checked)} />Remover fundo das fotos</label>
           <p className="mb-2 text-xs text-muted">Tira fundos lisos (branco, cinza ou cor única) e corta as margens. Fotos com fundo cheio de detalhes ficam como estão.</p>
-          <ul className="flex max-h-[28rem] flex-col divide-y divide-line overflow-y-auto">
-            {list.map((p) => (
-              <li key={p.id} className="flex items-center gap-3 py-2">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <label className="flex items-center gap-2 text-sm">Ordenar por
+              <Select aria-label="Ordenar por" className="w-44" value="" onChange={(e) => {
+                const k = e.target.value;
+                const ps = [...ordered];
+                const cmp: Record<string, (a: Product, b: Product) => number> = {
+                  priceAsc: (a, b) => Number(BigInt(a.retailPriceCents) - BigInt(b.retailPriceCents)),
+                  priceDesc: (a, b) => Number(BigInt(b.retailPriceCents) - BigInt(a.retailPriceCents)),
+                  name: (a, b) => a.name.localeCompare(b.name, 'pt-BR'),
+                  category: (a, b) => (a.categoryName ?? '~').localeCompare(b.categoryName ?? '~', 'pt-BR') || a.name.localeCompare(b.name, 'pt-BR'),
+                  stock: (a, b) => b.available - a.available,
+                };
+                if (cmp[k]) { orderDirty.current = true; setOrder(ps.sort(cmp[k]).map((p) => p.id)); }
+              }}>
+                <option value="">Escolher…</option>
+                <option value="priceAsc">Menor preço</option>
+                <option value="priceDesc">Maior preço</option>
+                <option value="name">Nome (A–Z)</option>
+                <option value="category">Categoria</option>
+                <option value="stock">Mais estoque</option>
+              </Select>
+            </label>
+            <span className="text-xs text-muted">{orderSaved === 'saving' ? 'Salvando ordem…' : orderSaved === 'saved' ? 'Ordem salva' : 'Arraste ou use as setas para mudar a ordem'}</span>
+          </div>
+          <ul className="flex max-h-[28rem] flex-col divide-y divide-line overflow-y-auto" aria-label="Ordem dos produtos no encarte">
+            {ordered.map((p, idx) => (
+              <li key={p.id} draggable
+                onDragStart={(e) => { setDrag(idx); e.dataTransfer.effectAllowed = 'move'; }}
+                onDragOver={(e) => { e.preventDefault(); setOver(idx); }}
+                onDragLeave={() => setOver((o) => (o === idx ? null : o))}
+                onDrop={(e) => { e.preventDefault(); orderDirty.current = true; if (drag !== null) setOrder(moveItem(ordered.map((x) => x.id), drag, idx)); setDrag(null); setOver(null); }}
+                onDragEnd={() => { setDrag(null); setOver(null); }}
+                className={cx('flex items-center gap-2 py-2', drag === idx && 'opacity-40', over === idx && drag !== null && drag !== idx && 'border-t-2 border-primary')}>
+                <GripVertical className="size-4 shrink-0 cursor-grab text-muted" aria-hidden />
+                <span className="w-6 shrink-0 text-right text-xs tabular text-muted">{idx + 1}</span>
                 <input type="checkbox" aria-label={`Incluir ${p.name}`} checked={selected.has(p.id)} onChange={() => toggle(setSelected, p.id)} />
                 <span className="size-10 shrink-0 overflow-hidden rounded-lg border border-line bg-bg">
                   {p.imageId ? <img src={`/api/v1/attachments/${p.imageId}`} alt="" className="size-full object-cover" loading="lazy" /> : <span className="flex size-full items-center justify-center text-muted"><ImageOff className="size-4" /></span>}
@@ -224,7 +288,11 @@ export function FlyerStudio() {
                   <span className="block truncate text-sm font-medium">{p.name}</span>
                   <span className="block text-xs text-muted">{brl(p.retailPriceCents)} · {p.available} em estoque{p.categoryName ? ` · ${p.categoryName}` : ''}</span>
                 </span>
-                <button type="button" aria-label={featured.has(p.id) ? `Tirar ${p.name} do destaque` : `Destacar ${p.name}`} aria-pressed={featured.has(p.id)} onClick={() => toggle(setFeatured, p.id)} className="rounded-lg p-1.5 hover:bg-surface-2">
+                <span className="flex shrink-0 flex-col">
+                  <button type="button" aria-label={`Subir ${p.name}`} disabled={idx === 0} onClick={() => { orderDirty.current = true; setOrder(moveItem(ordered.map((x) => x.id), idx, idx - 1)); }} className="rounded p-0.5 text-muted hover:bg-surface-2 hover:text-fg disabled:opacity-30"><ChevronUp className="size-3.5" /></button>
+                  <button type="button" aria-label={`Descer ${p.name}`} disabled={idx === ordered.length - 1} onClick={() => { orderDirty.current = true; setOrder(moveItem(ordered.map((x) => x.id), idx, idx + 1)); }} className="rounded p-0.5 text-muted hover:bg-surface-2 hover:text-fg disabled:opacity-30"><ChevronDown className="size-3.5" /></button>
+                </span>
+                <button type="button" aria-label={featured.has(p.id) ? `Tirar ${p.name} do destaque` : `Destacar ${p.name}`} aria-pressed={featured.has(p.id)} onClick={() => { orderDirty.current = true; setFeatured((cur) => { const n = new Set(cur); if (n.has(p.id)) n.delete(p.id); else { n.add(p.id); while (n.size > 2) n.delete(n.values().next().value!); } return n; }); }} className="rounded-lg p-1.5 hover:bg-surface-2">
                   <Star className={featured.has(p.id) ? 'size-4 fill-warning text-warning' : 'size-4 text-muted'} />
                 </button>
               </li>

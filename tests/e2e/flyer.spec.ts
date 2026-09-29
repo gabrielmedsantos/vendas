@@ -51,6 +51,19 @@ test('encarte com 17 produtos com foto', async ({ browser }) => {
   const preview = page.getByTestId('flyer-preview');
   await expect(preview).toContainText('Fone Bluetooth TWS');
   await expect(page.getByText('Prévia · 3 páginas')).toBeVisible();
+  // Ordem dos produtos: ordenar, mover com a seta e continuar igual depois de recarregar.
+  const lista = page.getByRole('list', { name: 'Ordem dos produtos no encarte' });
+  await page.getByLabel('Ordenar por').selectOption('priceDesc');
+  await expect(lista.getByRole('listitem').first()).toContainText('Cortador de Cabelo');
+  await page.getByLabel('Subir Mochila Sport').click();
+  await expect(lista.getByRole('listitem').nth(0)).toContainText('Mochila Sport');
+  await expect(page.getByText('Ordem salva')).toBeVisible();
+  await page.reload();
+  await page.getByRole('tab', { name: 'Encarte digital' }).click();
+  await expect(lista.getByRole('listitem').nth(0)).toContainText('Mochila Sport');
+  await expect(lista.getByRole('listitem').nth(1)).toContainText('Cortador de Cabelo');
+  await expect(preview).toContainText('Mochila Sport');
+  await lista.screenshot({ path: '../test-results/ordem.png' });
   await page.getByLabel('Destacar Relógio Smart W9 Ultra').click();
   await page.getByLabel('Título', { exact: true }).fill('Mega Saldão');
   await page.getByLabel('Validade das ofertas').fill('Ofertas válidas de 01/10 a 31/10');

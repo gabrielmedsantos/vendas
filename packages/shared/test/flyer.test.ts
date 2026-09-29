@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardPrice, contrastRatio, formatPercentBps, paginateFlyer, paletteFromColors, parsePercentBps, readableOn, splitPrice, BRAND_DEFAULTS } from '../src';
+import { applyOrder, moveItem, cardPrice, contrastRatio, formatPercentBps, paginateFlyer, paletteFromColors, parsePercentBps, readableOn, splitPrice, BRAND_DEFAULTS } from '../src';
 
 describe('encarte', () => {
   it('divide o preço em reais e centavos sem float', () => {
@@ -40,5 +40,13 @@ describe('encarte', () => {
     expect(contrastRatio(one.primary, '#ffffff')).toBeGreaterThanOrEqual(4.5);
     expect(readableOn('#ffd400')).toBe('#111111');
     expect(readableOn('#1d3fbf')).toBe('#ffffff');
+  });
+
+  it('ordem escolhida: salva primeiro, novos no fim, removidos somem; mover item', () => {
+    expect(applyOrder(['a', 'b', 'c', 'd'], ['c', 'x', 'a'])).toEqual(['c', 'a', 'b', 'd']);
+    expect(applyOrder(['a', 'b'], undefined)).toEqual(['a', 'b']);
+    expect(moveItem(['a', 'b', 'c', 'd'], 3, 0)).toEqual(['d', 'a', 'b', 'c']);
+    expect(moveItem(['a', 'b', 'c'], 0, 2)).toEqual(['b', 'c', 'a']);
+    expect(moveItem(['a', 'b'], 5, 0)).toEqual(['a', 'b']);
   });
 });

@@ -13,6 +13,10 @@ export interface FlyerSettings {
   cardSurchargeBps: number;
   /** Parcelas mencionadas no cartão (0 = não menciona cartão). */
   cardInstallments: number;
+  /** Ordem escolhida dos produtos (ids); produtos novos entram no fim. */
+  order?: string[];
+  /** Produtos em destaque na capa (ids). */
+  featured?: string[];
 }
 
 export const FLYER_DEFAULTS: FlyerSettings = {
@@ -153,4 +157,23 @@ export function paletteFromColors(colors: string[]): BrandColors {
   const accent = others.length ? [...others].sort((a, b) => luminance(b) - luminance(a))[0]! : BRAND_DEFAULTS.accent;
   const secondary = others.find((c) => c !== accent) ?? (accent === BRAND_DEFAULTS.accent ? BRAND_DEFAULTS.secondary : shade(accent, -0.35));
   return { primary, secondary, accent };
+}
+
+/** Aplica a ordem salva: ids salvos que ainda existem primeiro (na ordem salva), depois os novos na ordem original. */
+export function applyOrder(ids: string[], saved: string[] | undefined | null): string[] {
+  const exists = new Set(ids);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of saved ?? []) if (exists.has(id) && !seen.has(id)) { out.push(id); seen.add(id); }
+  for (const id of ids) if (!seen.has(id)) out.push(id);
+  return out;
+}
+
+/** Move o item da posição `from` para `to` (nova lista). */
+export function moveItem<T>(list: T[], from: number, to: number): T[] {
+  if (from === to || from < 0 || from >= list.length) return list;
+  const out = [...list];
+  const [it] = out.splice(from, 1);
+  out.splice(Math.max(0, Math.min(to, out.length)), 0, it!);
+  return out;
 }
