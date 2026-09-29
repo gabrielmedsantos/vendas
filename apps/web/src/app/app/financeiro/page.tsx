@@ -2,15 +2,15 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { ArrowLeftRight, Banknote, Lock, Merge, Plus, Vault } from 'lucide-react';
+import { ArrowLeftRight, Banknote, Lock, Merge, Plus, Scale, Vault } from 'lucide-react';
 import { useAccounts } from '@/components/ops/hooks';
-import { Badge, Button, Card, ErrorState, Field, FormError, Input, LoadingBlock, Modal, MoneyInput, PageHeader, Pager, Select, Table, Td, Th } from '@/components/ui';
+import { Badge, Button, Card, cx, ErrorState, Field, FormError, Input, LoadingBlock, Modal, MoneyInput, PageHeader, Pager, Select, Table, Td, Th } from '@/components/ui';
 import { useToast } from '@/components/toast';
 import { api, newKey, qs } from '@/lib/client/api';
 import { brl, dateBR, KIND_LABEL } from '@/lib/client/format';
 import { useCan } from '@/lib/client/session';
 
-type Dialog = null | 'movement' | 'transfer' | 'account' | 'open' | 'close' | 'period' | 'unify';
+type Dialog = null | 'movement' | 'transfer' | 'account' | 'open' | 'close' | 'period' | 'unify' | 'adjust';
 
 export default function FinancePage() {
   const can = useCan();
@@ -20,6 +20,7 @@ export default function FinancePage() {
   const [cursor, setCursor] = useState<string | undefined>();
   const [accountFilter, setAccountFilter] = useState('');
   const moves = useQuery({ queryKey: ['cash-moves', cursor, accountFilter], queryFn: () => api<{ data: { id: string; occurredOn: string; direction: string; amountCents: string; kind: string; originType: string; description: string | null; accountName: string }[]; meta: { cursor: string | null; hasMore: boolean } }>(`finance/cash-movements${qs({ cursor, accountId: accountFilter })}`) });
+  const breakdown = useQuery({ queryKey: ['balance-breakdown'], queryFn: () => api<{ items: { label: string; cents: string; count: number }[]; balanceCents: string; openPayableCents: string; openReceivableCents: string; stockCostCents?: string }>('finance/balance-breakdown') });
   const periods = useQuery({ queryKey: ['periods'], queryFn: () => api<{ period: string; status: string; reason: string | null }[]>('finance/periods') });
   const [dialog, setDialog] = useState<Dialog>(null);
   const [f, setF] = useState<Record<string, string>>({});
@@ -59,6 +60,7 @@ export default function FinancePage() {
             <div key={a.id} className="rounded-2xl border border-line bg-surface p-4">
               <div className="flex items-center justify-between"><p className="text-sm font-medium">{a.name}</p><Badge tone={a.kind === 'cash' ? 'warning' : 'info'}>{a.kind === 'cash' ? 'Caixa' : a.kind === 'bank' ? 'Banco' : 'Outra'}</Badge></div>
               <p className="mt-2 text-xl font-semibold tabular">{brl(a.balanceCents)}</p>
+              {manage && <Button size="sm" variant="quiet" className="mt-1 -ml-2" onClick={() => { setTarget(a.id); open('adjust', { target: '', reason: 'Conferência com o saldo real' }); }}><Scale className="size-3.5" />Ajustar saldo</Button>}
               {a.kind === 'cash' && manage && (
                 <div className="mt-2">{a.openSession
                   ? <Button size="sm" variant="secondary" onClick={() => { setTarget(a.openSession!); open('close', { counted: '' }); }}><Lock className="size-3.5" />Fechar caixa</Button>
@@ -68,6 +70,32 @@ export default function FinancePage() {
             </div>
           ))}
         </div>
+      )}
+      {breakdown.data && (
+        <Card className="mb-4" title="De onde vem o saldo" description="Tudo que entrou menos tudo que saiu das contas, por tipo. É dinheiro, não lucro.">
+          <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+            <div>
+              {breakdown.data.items.length === 0 ? <p className="text-sm text-muted">Nenhum movimento ainda.</p> : (
+                <ul className="divide-y divide-line text-sm">
+                  {breakdown.data.items.map((l) => (
+                    <li key={l.label} className="flex items-center justify-between gap-3 py-2">
+                      <span>{l.label} <span className="text-xs text-muted">({l.count})</span></span>
+                      <span className={cx('tabular font-medium', BigInt(l.cents) >= 0n ? 'text-success' : 'text-danger-soft')}>{BigInt(l.cents) >= 0n ? '+' : '−'}{brl((BigInt(l.cents) < 0n ? -BigInt(l.cents) : BigInt(l.cents)).toString())}</span>
+                    </li>
+                  ))}
+                  <li className="flex items-center justify-between gap-3 py-2 font-semibold"><span>Saldo nas contas</span><span className="tabular">{brl(breakdown.data.balanceCents)}</span></li>
+                </ul>
+              )}
+            </div>
+            <div className="flex flex-col gap-3 rounded-xl border border-line bg-bg p-4 text-sm">
+              <p className="font-medium">Ainda não passou pela conta</p>
+              <div className="flex justify-between"><span className="text-muted">Contas a pagar em aberto</span><span className="tabular text-danger-soft">{brl(breakdown.data.openPayableCents)}</span></div>
+              <div className="flex justify-between"><span className="text-muted">Contas a receber em aberto</span><span className="tabular text-success">{brl(breakdown.data.openReceivableCents)}</span></div>
+              {breakdown.data.stockCostCents !== undefined && <div className="flex justify-between"><span className="text-muted">Mercadoria em estoque (a custo)</span><span className="tabular">{brl(breakdown.data.stockCostCents)}</span></div>}
+              <p className="text-xs text-muted">Compra lançada “a pagar” só sai da conta quando você der baixa em A pagar. O dinheiro usado em mercadoria que ainda está no estoque não some: virou produto e aparece aqui a custo. Gasto pago que não aparece na lista ao lado ainda não foi lançado no sistema.</p>
+            </div>
+          </div>
+        </Card>
       )}
       <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
         <Card title="Movimentos de caixa e banco" description="Somente dinheiro que efetivamente entrou ou saiu. Vendas a prazo aparecem quando recebidas." action={
@@ -104,6 +132,26 @@ export default function FinancePage() {
           <FormError error={error} />
         </div>
       </Modal>
+      {dialog === 'adjust' && (() => {
+        const acc = accounts.data?.find((a) => a.id === target);
+        const cur = BigInt(acc?.balanceCents ?? '0');
+        const diff = f.target !== '' && f.target !== undefined ? BigInt(f.target) - cur : null;
+        return (
+          <Modal open onClose={() => setDialog(null)} title={`Ajustar saldo · ${acc?.name ?? ''}`} footer={<><Button variant="secondary" onClick={() => setDialog(null)}>Cancelar</Button><Button loading={busy} disabled={diff === null || diff === 0n || (f.reason ?? '').trim().length < 3} onClick={() => run(() => api(`finance/accounts/${target}/adjust-balance`, { idempotencyKey: key, body: { targetCents: f.target, reason: (f.reason ?? '').trim() } }), 'Saldo ajustado.')}>Ajustar</Button></>}>
+            <div className="flex flex-col gap-3 text-sm">
+              <p className="text-muted">Saldo no sistema: <span className="font-semibold text-fg tabular">{brl(cur.toString())}</span></p>
+              <Field label="Quanto tem de verdade nesta conta?" htmlFor="adj-target" help="Confira no extrato do banco ou conte o dinheiro."><MoneyInput id="adj-target" value={f.target ?? ''} onChange={(c) => setF({ ...f, target: c })} /></Field>
+              {diff !== null && diff !== 0n && (
+                <p className={diff > 0n ? 'text-success' : 'text-danger-soft'}>Será lançado um ajuste de {diff > 0n ? 'entrada' : 'saída'} de {brl((diff > 0n ? diff : -diff).toString())}.</p>
+              )}
+              {diff === 0n && <p className="text-muted">O saldo já está igual; nada a ajustar.</p>}
+              <Field label="Motivo" htmlFor="adj-reason"><Input id="adj-reason" maxLength={300} value={f.reason ?? ''} onChange={(e) => setF({ ...f, reason: e.target.value })} /></Field>
+              <p className="text-xs text-muted">O ajuste não conta como receita nem despesa e fica registrado no livro de caixa com o motivo. Gastos conhecidos (compras, despesas) é melhor lançar nas telas próprias, para aparecerem nos relatórios.</p>
+              <FormError error={error} />
+            </div>
+          </Modal>
+        );
+      })()}
       <Modal open={dialog === 'unify'} onClose={() => setDialog(null)} title="Unificar contas" footer={<><Button variant="secondary" onClick={() => setDialog(null)}>Cancelar</Button><Button loading={busy} disabled={!f.targetId || (f.name ?? '').trim().length < 2} onClick={() => run(() => api('finance/accounts/unify', { body: { targetId: f.targetId, name: f.name?.trim() || undefined } }), 'Contas unificadas: agora tudo entra numa conta só.')}>Unificar</Button></>}>
         <div className="flex flex-col gap-3 text-sm">
           <Field label="Conta que fica" htmlFor="un-target">

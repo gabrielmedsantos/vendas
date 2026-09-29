@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, describe, expect, it } from 'vitest';
 import { withTenant } from '@gct/db';
-import { listAccounts, openCashSession, closeCashSession, recordCashMovement, unifyAccounts, zCashMovement } from '@gct/app';
-import { accounts, closeDeps, createTenant, reconcile, testDeps } from './helpers';
+import { adjustAccountBalance, balanceBreakdown, confirmSale, createExpense, quickPurchase, zExpense, zPurchase, zSale, getMetrics, listAccounts, openCashSession, closeCashSession, recordCashMovement, unifyAccounts, zCashMovement } from '@gct/app';
+import { accounts, closeDeps, createTenant, makeParty, makeProduct, reconcile, testDeps, todayIn } from './helpers';
 
 const deps = testDeps();
 afterAll(closeDeps);
@@ -51,5 +51,44 @@ describe('conta única', () => {
     // Repetir não faz nada de novo; conta arquivada não pode ser a escolhida.
     await expect(unifyAccounts(deps, actor, { targetId: acc.bank })).resolves.toMatchObject({ archived: 0 });
     await expect(unifyAccounts(deps, actor, { targetId: acc.cash })).rejects.toMatchObject({ code: 'not_found' });
+  });
+
+  it('ajustar saldo ao valor real: lança só a diferença, fora da receita; repetir com a mesma chave não duplica', async () => {
+    const T = await createTenant(deps, 'Loja Ajuste Saldo');
+    const actor = T.owner;
+    const conta = (await listAccounts(deps, actor))[0]!;
+    const key = randomUUID();
+    const up = await adjustAccountBalance(deps, actor, conta.id, { targetCents: 264300n, reason: 'Conferência com o extrato' }, key);
+    expect(up.diffCents).toBe('264300');
+    const again = await adjustAccountBalance(deps, actor, conta.id, { targetCents: 264300n, reason: 'Conferência com o extrato' }, key);
+    expect(again.id).toBe(up.id);
+    const down = await adjustAccountBalance(deps, actor, conta.id, { targetCents: 116100n, reason: 'Gastos não lançados' }, randomUUID());
+    expect(down.diffCents).toBe('-148200');
+    expect((await listAccounts(deps, actor))[0]!.balance_cents).toBe(116100n);
+    await expect(adjustAccountBalance(deps, actor, conta.id, { targetCents: 116100n, reason: 'Nada muda' }, randomUUID())).rejects.toMatchObject({ code: 'conflict' });
+    const m = await getMetrics(deps, actor, {});
+    expect(JSON.stringify(m, (_k, v) => (typeof v === 'bigint' ? v.toString() : v))).not.toMatch(/264300|148200/);
+    expect(await reconcile(deps, actor)).toEqual([]);
+  });
+
+  it('de onde vem o saldo: vendas recebidas − compras e despesas pagas = saldo; compra a prazo fica em aberto', async () => {
+    const T = await createTenant(deps, 'Loja Saldo Explicado');
+    const actor = T.owner;
+    const conta = (await listAccounts(deps, actor))[0]!;
+    const sup = await makeParty(deps, actor, 'Fornecedor Saldo', { supplier: true, customer: false });
+    const p = await makeProduct(deps, actor, { name: 'Fone Saldo', priceCents: 10000n });
+    await quickPurchase(deps, actor, zPurchase.parse({ supplierId: sup, purchaseDate: todayIn(actor), items: [{ variantId: p.variantId, quantity: 5, unitCostCents: '4000' }], paymentTerms: { mode: 'pay_now', accountId: conta.id, method: 'pix' } }), randomUUID());
+    await quickPurchase(deps, actor, zPurchase.parse({ supplierId: sup, purchaseDate: todayIn(actor), items: [{ variantId: p.variantId, quantity: 2, unitCostCents: '4000' }], paymentTerms: { mode: 'due', dueDate: todayIn(actor) } }), randomUUID());
+    await confirmSale(deps, actor, zSale.parse({ items: [{ variantId: p.variantId, quantity: 3, unitPriceCents: '10000' }], payments: [{ kind: 'pix', amountCents: '30000' }] }), randomUUID());
+    await createExpense(deps, actor, zExpense.parse({ description: 'Anúncios', competenceDate: todayIn(actor), amountCents: '5000', payNow: { accountId: conta.id, method: 'pix' } }), randomUUID());
+    const b = await balanceBreakdown(deps, actor);
+    const by = Object.fromEntries(b.items.map((i) => [i.label, i.cents]));
+    expect(by['Vendas recebidas']).toBe(30000n);
+    expect(by['Compras de mercadoria pagas']).toBe(-20000n);
+    expect(by['Despesas pagas']).toBe(-5000n);
+    expect(b.balanceCents).toBe(5000n);
+    expect(b.balanceCents).toBe(total(await listAccounts(deps, actor)));
+    expect(b.openPayableCents).toBe(8000n);
+    expect(b.stockCostCents).toBe(16000n); // 4 unidades a R$ 40
   });
 });

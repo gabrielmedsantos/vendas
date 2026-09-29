@@ -258,5 +258,19 @@ test.describe.serial('jornada completa', () => {
     await expect(page.getByText('Contas unificadas: agora tudo entra numa conta só.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Unificar contas' })).toHaveCount(0);
     await expect(page.getByText('Caixa antigo')).toHaveCount(0);
+    // Ajustar saldo ao valor real conferido no extrato.
+    await page.getByRole('button', { name: 'Ajustar saldo' }).first().click();
+    const adj = page.getByRole('dialog');
+    await adj.getByLabel('Quanto tem de verdade nesta conta?').fill('1161');
+    await adj.getByLabel('Quanto tem de verdade nesta conta?').blur();
+    await expect(adj.getByText(/Será lançado um ajuste de/)).toBeVisible();
+    await page.screenshot({ path: '../test-results/ajustar-saldo.png' });
+    await adj.getByRole('button', { name: 'Ajustar', exact: true }).click();
+    await expect(page.getByText('Saldo ajustado.')).toBeVisible();
+    await expect(page.getByText('R$ 1.161,00').first()).toBeVisible();
+    await expect(page.getByText('De onde vem o saldo')).toBeVisible();
+    await expect(page.getByText('Vendas recebidas')).toBeVisible();
+    await expect(page.getByText('Ajustes de saldo (conferência)')).toBeVisible();
+    await page.screenshot({ path: '../test-results/financeiro.png', fullPage: true });
   });
 });

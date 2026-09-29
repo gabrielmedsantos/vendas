@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { sql, type Tx } from '@gct/db';
 import { assertAllocationWithinBalance, buildInstallments, titleStatus } from '@gct/domain';
 import { addDays, AppError, conflict, invalid, notFound, sumCents } from '@gct/shared';
-import { audit, emit, idempotent, requirePermission, requireWritable, todayLocal, tx, type Actor, type AppDeps } from './core';
+import { audit, can, emit, idempotent, requirePermission, requireWritable, todayLocal, tx, type Actor, type AppDeps } from './core';
 import { decodeCursor, pageOf, zCentsNonNeg, zCentsPos, zLocalDate, zPageQuery, zText, zUuid } from './validation';
 
 export interface FinCtx {
@@ -560,6 +560,59 @@ export async function createAccount(deps: AppDeps, actor: Actor, input: z.infer<
   });
 }
 
+const IN_LABEL: Record<string, string> = { sale: 'Vendas recebidas', trade: 'Trocas: diferença recebida', manual: 'Recebimentos avulsos', mixed: 'Recebimentos' };
+const OUT_LABEL: Record<string, string> = {
+  purchase: 'Compras de mercadoria pagas', expense: 'Despesas pagas', refund: 'Reembolsos a clientes', trade: 'Trocas: valores pagos ao cliente',
+  acquisition_cost: 'Custos de aquisição pagos (frete, reparo)', manual: 'Pagamentos avulsos', mixed: 'Pagamentos',
+};
+const KIND_LABEL: Record<string, string> = {
+  opening: 'Saldo inicial', capital_in: 'Aportes do dono', withdrawal: 'Retiradas do dono', loan_in: 'Empréstimos recebidos', loan_out: 'Empréstimos pagos', reversal: 'Estornos de recebimentos/pagamentos',
+};
+
+/**
+ * Explica o saldo: soma de tudo que entrou menos tudo que saiu, por tipo (todas as contas,
+ * inclusive arquivadas; transferências internas se anulam e ficam fora). Mostra também o que
+ * ainda não passou pela conta: contas a pagar e a receber em aberto e (com permissão) estoque a custo.
+ */
+export async function balanceBreakdown(deps: AppDeps, actor: Actor) {
+  requirePermission(actor, 'finance.view');
+  return tx(deps, actor, async (trx) => {
+    const r = await sql<{ direction: 'in' | 'out'; kind: string; origin_type: string; title_origin: string | null; cents: bigint; n: number }>`
+      select m.direction, m.kind, m.origin_type,
+             case when m.kind = 'settlement' then (
+               select case when count(distinct t.origin_type) = 1 then min(t.origin_type) else 'mixed' end
+               from settlement_allocations a join financial_titles t on t.id = a.title_id where a.settlement_id = m.origin_id) end as title_origin,
+             sum(m.amount_cents)::bigint as cents, count(*)::int as n
+      from cash_movements m
+      where m.kind not in ('transfer_in', 'transfer_out')
+      group by 1, 2, 3, 4`.execute(trx);
+    const lines = new Map<string, { label: string; cents: bigint; count: number }>();
+    for (const row of r.rows) {
+      let label: string;
+      if (row.kind === 'settlement') label = (row.direction === 'in' ? IN_LABEL : OUT_LABEL)[row.title_origin ?? 'mixed'] ?? (row.direction === 'in' ? 'Recebimentos' : 'Pagamentos');
+      else if (row.kind === 'cash_adjustment') label = row.origin_type === 'balance_adjustment' ? 'Ajustes de saldo (conferência)' : row.origin_type === 'cash_session' ? 'Diferenças no fechamento de caixa' : 'Ajustes de caixa';
+      else label = KIND_LABEL[row.kind] ?? row.kind;
+      const signed = row.direction === 'in' ? BigInt(row.cents) : -BigInt(row.cents);
+      const cur = lines.get(label) ?? { label, cents: 0n, count: 0 };
+      cur.cents += signed;
+      cur.count += row.n;
+      lines.set(label, cur);
+    }
+    const items = [...lines.values()].filter((l) => l.cents !== 0n).sort((a, b) => (b.cents > a.cents ? 1 : b.cents < a.cents ? -1 : 0));
+    const balance = items.reduce((a, l) => a + l.cents, 0n);
+    const open = await sql<{ direction: string; cents: bigint }>`
+      select direction, coalesce(sum(balance_cents), 0)::bigint as cents from financial_titles where status in ('open', 'partially_settled') group by direction`.execute(trx);
+    const payable = BigInt(open.rows.find((o) => o.direction === 'payable')?.cents ?? 0);
+    const receivable = BigInt(open.rows.find((o) => o.direction === 'receivable')?.cents ?? 0);
+    let stockCostCents: bigint | undefined;
+    if (can(actor, 'costs.view')) {
+      const st = await sql<{ c: bigint }>`select coalesce(sum(cost_remaining_cents), 0)::bigint as c from inventory_lots where status = 'available'`.execute(trx);
+      stockCostCents = BigInt(st.rows[0]!.c);
+    }
+    return { items, balanceCents: balance, openPayableCents: payable, openReceivableCents: receivable, ...(stockCostCents !== undefined ? { stockCostCents } : {}) };
+  });
+}
+
 export const zUnifyAccounts = z.object({ targetId: zUuid, name: zText(80).min(2).optional() });
 
 /**
@@ -612,6 +665,44 @@ export async function unifyAccounts(deps: AppDeps, actor: Actor, input: z.infer<
     }
     await audit(trx, actor, 'finance.accounts_unified', 'financial_account', target.id, { archived: others.map((o) => o.id), movedCents: moved });
     return { accountId: target.id, archived: others.length };
+  });
+}
+
+export const zAdjustBalance = z.object({
+  targetCents: zCentsNonNeg,
+  reason: zText(300).min(3, 'Informe o motivo (ex.: conferência com o extrato)'),
+  occurredOn: zLocalDate.optional(),
+});
+
+/**
+ * Ajusta o saldo da conta ao valor real conferido (extrato ou gaveta): lança só a diferença
+ * como ajuste de saldo, fora da receita e das despesas. Histórico anterior intacto.
+ */
+export async function adjustAccountBalance(deps: AppDeps, actor: Actor, accountId: string, input: z.infer<typeof zAdjustBalance>, idempotencyKey?: string) {
+  requirePermission(actor, 'finance.manage');
+  requireWritable(actor);
+  return tx(deps, actor, async (trx) => {
+    const { result } = await idempotent(trx, actor.tenantId, 'balance_adjustment', idempotencyKey, { accountId, ...input }, async () => {
+      const acc = await sql<{ id: string; status: string }>`select id, status from financial_accounts where id = ${accountId} for update`.execute(trx);
+      if (!acc.rows[0] || acc.rows[0].status !== 'active') throw notFound('Conta');
+      const date = input.occurredOn ?? todayLocal(actor.timezone);
+      await assertPeriodOpen(trx, date);
+      const b = await sql<{ bal: bigint }>`select coalesce(sum(case when direction='in' then amount_cents else -amount_cents end),0)::bigint as bal from cash_movements where account_id = ${accountId}`.execute(trx);
+      const current = BigInt(b.rows[0]!.bal);
+      const diff = input.targetCents - current;
+      if (diff === 0n) throw conflict('O saldo já está igual ao valor informado.');
+      const r = await trx
+        .insertInto('cash_movements')
+        .values({
+          tenant_id: actor.tenantId, account_id: accountId, direction: diff > 0n ? 'in' : 'out', amount_cents: diff > 0n ? diff : -diff, kind: 'cash_adjustment',
+          origin_type: 'balance_adjustment', origin_id: null, occurred_on: date, description: `Ajuste de saldo: ${input.reason}`, created_by: actor.userId,
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      await audit(trx, actor, 'finance.balance_adjusted', 'financial_account', accountId, { from: current, to: input.targetCents, diff, reason: input.reason });
+      return { id: r.id, previousCents: current.toString(), diffCents: diff.toString() };
+    });
+    return result;
   });
 }
 

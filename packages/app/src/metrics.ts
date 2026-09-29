@@ -59,8 +59,8 @@ export async function periodFacts(trx: Tx, from: string, to: string): Promise<Pe
       (select coalesce(sum(case when reversal_of is null then fee_cents else -fee_cents end), 0) from settlements where direction = 'in' and settled_on between ${from}::date and ${to}::date) as fees,
       (select coalesce(sum(amount_cents), 0) from expenses where status = 'active' and competence_date between ${from}::date and ${to}::date) as expenses,
       (select coalesce(sum(to_cogs_cents), 0) from acquisition_costs where occurred_on between ${from}::date and ${to}::date) as extra_cogs,
-      (select coalesce(sum(amount_cents), 0) from cash_movements where direction = 'in' and kind not in ('transfer_in', 'opening') and occurred_on between ${from}::date and ${to}::date) as cash_in,
-      (select coalesce(sum(amount_cents), 0) from cash_movements where direction = 'out' and kind not in ('transfer_out') and occurred_on between ${from}::date and ${to}::date) as cash_out
+      (select coalesce(sum(amount_cents), 0) from cash_movements where direction = 'in' and kind not in ('transfer_in', 'opening') and origin_type <> 'balance_adjustment' and occurred_on between ${from}::date and ${to}::date) as cash_in,
+      (select coalesce(sum(amount_cents), 0) from cash_movements where direction = 'out' and kind not in ('transfer_out') and origin_type <> 'balance_adjustment' and occurred_on between ${from}::date and ${to}::date) as cash_out
   `.execute(trx);
   const f = r.rows[0]!;
   return {
@@ -97,7 +97,7 @@ export const FORMULAS = {
   contribution: 'Após custos variáveis = resultado bruto − taxas de recebimento − comissões de canal.',
   operatingResult: 'Resultado operacional gerencial = após custos variáveis − despesas operacionais por competência (inclui perdas de estoque). Não é lucro líquido contábil.',
   margin: 'Margem = resultado / receita líquida × 100; sem receita positiva, "sem base".',
-  cash: 'Caixa do período = entradas e saídas liquidadas nas contas (exclui transferências internas e saldo inicial). Vendas a prazo só entram quando recebidas.',
+  cash: 'Caixa do período = entradas e saídas liquidadas nas contas (exclui transferências internas, saldo inicial e ajustes de saldo à conferência). Vendas a prazo só entram quando recebidas.',
   averageTicket: 'Ticket médio = receita comercial das vendas válidas / quantidade de vendas.',
 };
 
