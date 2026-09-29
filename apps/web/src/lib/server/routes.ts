@@ -415,8 +415,16 @@ export const routes: RouteDef[] = [
   {
     method: 'POST', path: 'documents',
     handler: async ({ deps, actor, body }) => {
-      const input = p(z.object({ docType: z.enum(['quote', 'warranty']), sourceType: z.enum(['sale', 'warranty_case']), sourceId: z.string().uuid() }), await body());
+      const input = p(z.object({ docType: z.enum(['quote', 'warranty', 'sale_contract']), sourceType: z.enum(['sale', 'warranty_case']), sourceId: z.string().uuid() }), await body());
+      if ((input.docType === 'warranty') !== (input.sourceType === 'warranty_case')) throw new AppError('validation_failed', 'Tipo de documento incompatível com a origem.');
       return A.requestDocumentAction(deps, actor, input.docType, input.sourceType, input.sourceId);
+    },
+  },
+  {
+    method: 'POST', path: 'documents/:id/share', rate: { max: 60, windowMs: 3600_000 },
+    handler: async ({ deps, actor, params }) => {
+      const r = await A.shareDocument(deps, actor, id(params));
+      return { url: `${(process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '')}/d/${r.token}`, expiresAt: r.expiresAt };
     },
   },
   {

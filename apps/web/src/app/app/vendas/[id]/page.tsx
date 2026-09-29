@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
-import { RotateCcw, XCircle } from 'lucide-react';
+import { FileSignature, RotateCcw, XCircle } from 'lucide-react';
 import { formatBRL } from '@gct/shared';
 import { SaleWarranty } from '@/components/aftersales/warranty';
 import { DocLinks } from '@/components/docs/doc-links';
@@ -39,6 +39,9 @@ export default function SaleDetail() {
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const [key, setKey] = useState(newKey);
+  const [contractBusy, setContractBusy] = useState(false);
+  const customerId = q.data?.sale.customerId;
+  const customer = useQuery({ queryKey: ['party', customerId], queryFn: () => api<{ party: { phone: string | null } }>(`parties/${customerId}`), enabled: !!customerId && can('parties.view') });
   if (q.isLoading) return <LoadingBlock rows={6} />;
   if (q.error) return <ErrorState error={q.error} retry={() => q.refetch()} />;
   const d = q.data!;
@@ -105,7 +108,16 @@ export default function SaleDetail() {
             ))}</ul>
             {d.titles.length > 0 && <p className="mt-3 border-t border-line pt-2 text-sm">Em aberto: <strong className="tabular">{formatBRL(open)}</strong></p>}
           </Card>
-          <Card title="Documentos"><DocLinks docs={d.documents} /></Card>
+          <Card title="Documentos" action={['confirmed', 'partially_returned'].includes(s.status) && !d.documents.some((x) => x.docType === 'sale_contract') && (
+            <Button size="sm" loading={contractBusy} onClick={async () => {
+              setContractBusy(true); setError(null);
+              try { await api('documents', { body: { docType: 'sale_contract', sourceType: 'sale', sourceId: s.id } }); await qc.invalidateQueries({ queryKey: ['sale', id] }); toast('Gerando o contrato de venda…'); } catch (e) { setError(e); } finally { setContractBusy(false); }
+            }}><FileSignature className="size-4" />Gerar contrato de venda</Button>
+          )}>
+            {!d.documents.some((x) => x.docType === 'sale_contract') && ['confirmed', 'partially_returned'].includes(s.status) && <p className="mb-3 text-xs text-muted">O contrato de venda sai preenchido com cliente, aparelho, IMEI, pagamento e garantia, pronto para enviar ao cliente.</p>}
+            <DocLinks docs={d.documents} contact={{ name: s.customerName, phone: customer.data?.party.phone ?? null }} />
+            {!mode && <FormError error={error} />}
+          </Card>
           {['confirmed', 'partially_returned'].includes(s.status) && <Card title="Garantia"><SaleWarranty saleId={s.id} items={d.items.filter((i) => i.productKind === 'physical')} canOpen={can('sales.create')} /></Card>}
           {s.notes && <Card title="Observações"><p className="text-sm text-muted">{s.notes}</p></Card>}
         </div>

@@ -143,6 +143,22 @@ test.describe.serial('jornada completa', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Confirmar venda' }).click();
     await expect(page.getByRole('heading', { name: /Venda #/ })).toBeVisible();
     await expect(page.getByText('R$ 100,00').first()).toBeVisible();
+    // Contrato de venda: gera, cria link e o cliente abre sem login.
+    await page.getByRole('button', { name: 'Gerar contrato de venda' }).click();
+    const contrato = page.getByRole('listitem').filter({ hasText: 'Contrato de venda' });
+    await contrato.getByRole('button', { name: 'Enviar ao cliente' }).click({ timeout: 30_000 });
+    await page.getByRole('button', { name: 'Gerar link para o cliente' }).click();
+    const link = await page.getByLabel('Link do documento').inputValue();
+    expect(link).toMatch(/\/d\/[A-Za-z0-9_-]{43}$/);
+    await expect(page.getByRole('link', { name: /Enviar pelo WhatsApp/ })).toHaveAttribute('href', /wa\.me/);
+    await page.screenshot({ path: '../test-results/enviar-contrato.png' });
+    const anon = await page.context().browser()!.newContext();
+    const res = await anon.request.get(new URL(link).pathname, { baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:3000' });
+    expect(res.status()).toBe(200);
+    expect(res.headers()['content-type']).toContain('application/pdf');
+    expect((await anon.request.get('/d/' + 'x'.repeat(43), { baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:3000' })).status()).toBe(404);
+    await anon.close();
+    await page.getByRole('dialog').getByRole('button', { name: 'Fechar' }).first().click();
   });
 
   test('troca: cliente entrega usado e paga a diferença', async () => {

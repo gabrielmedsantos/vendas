@@ -212,6 +212,16 @@ export interface Documents {
   tenant_id: string;
 }
 
+export interface DocumentShares {
+  created_at: Generated<Timestamp>;
+  created_by: string | null;
+  document_id: string;
+  expires_at: Timestamp;
+  revoked_at: Timestamp | null;
+  tenant_id: string;
+  token_hash: string;
+}
+
 export interface DocumentSequences {
   doc_type: string;
   next_number: Generated<bigint>;
@@ -1167,6 +1177,7 @@ export interface DB {
   categories: Categories;
   daily_stock_snapshots: DailyStockSnapshots;
   document_sequences: DocumentSequences;
+  document_shares: DocumentShares;
   documents: Documents;
   expense_categories: ExpenseCategories;
   expenses: Expenses;

@@ -1,10 +1,10 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { jsonb, nextNumber, sql, withTenant, type Tx } from '@gct/db';
 import { conflict, notFound, WARRANTY_TERMS_DEFAULT } from '@gct/shared';
 import { audit, emit, requirePermission, tx, type Actor, type AppDeps } from './core';
 import { renderDocumentPdf } from './pdf';
 
-export type DocType = 'sale_receipt' | 'purchase_term' | 'trade_summary' | 'quote' | 'return_receipt' | 'warranty';
+export type DocType = 'sale_receipt' | 'purchase_term' | 'trade_summary' | 'quote' | 'return_receipt' | 'warranty' | 'sale_contract';
 
 export const TEMPLATE_VERSION: Record<DocType, string> = {
   sale_receipt: 'recibo-venda@1',
@@ -13,6 +13,7 @@ export const TEMPLATE_VERSION: Record<DocType, string> = {
   quote: 'orcamento@1',
   return_receipt: 'comprovante-devolucao@1',
   warranty: 'garantia@1',
+  sale_contract: 'contrato-venda@1',
 };
 
 export const DOC_LABEL: Record<DocType, string> = {
@@ -22,6 +23,7 @@ export const DOC_LABEL: Record<DocType, string> = {
   quote: 'Orçamento',
   return_receipt: 'Comprovante de devolução',
   warranty: 'Termo de garantia',
+  sale_contract: 'Contrato de venda',
 };
 
 async function companySnapshot(trx: Tx) {
@@ -33,10 +35,10 @@ async function companySnapshot(trx: Tx) {
   };
 }
 
-async function partySnapshot(trx: Tx, id: string | null) {
+async function partySnapshot(trx: Tx, id: string | null, withAddress = false) {
   if (!id) return null;
-  const p = await trx.selectFrom('parties').select(['name', 'document', 'phone', 'email', 'person_type']).where('id', '=', id).executeTakeFirst();
-  return p ? { name: p.name, document: p.document, phone: p.phone, email: p.email, personType: p.person_type } : null;
+  const p = await trx.selectFrom('parties').select(['name', 'document', 'phone', 'email', 'person_type', 'address']).where('id', '=', id).executeTakeFirst();
+  return p ? { name: p.name, document: p.document, phone: p.phone, email: p.email, personType: p.person_type, ...(withAddress ? { address: p.address } : {}) } : null;
 }
 
 async function unitIdentifiers(trx: Tx, unitId: string | null) {
@@ -86,6 +88,27 @@ async function buildSnapshot(trx: Tx, docType: DocType, sourceId: string): Promi
         company, customer: await partySnapshot(trx, s.customer_id), number: s.number?.toString() ?? null, date: s.sale_date, validUntil: s.valid_until,
         items: withIds, subtotalCents: s.subtotal_cents, discountCents: s.discount_cents, shippingCents: s.shipping_cents, totalCents: s.total_cents,
         payments, notes: s.notes, origin: s.origin,
+      };
+    }
+    case 'sale_contract': {
+      // Contrato de venda: dados da venda confirmada + estado de cada unidade vendida (condição, bateria, acessórios).
+      const s = await trx.selectFrom('sales').selectAll().where('id', '=', sourceId).executeTakeFirstOrThrow();
+      const items = await trx
+        .selectFrom('sale_items as si')
+        .innerJoin('product_variants as v', 'v.id', 'si.variant_id')
+        .innerJoin('products as p', 'p.id', 'v.product_id')
+        .leftJoin('inventory_units as u', 'u.id', 'si.unit_id')
+        .select(['si.description', 'si.quantity', 'si.unit_price_cents', 'si.total_cents', 'si.unit_id', 'p.warranty_days', 'p.brand', 'u.condition', 'u.battery_health_pct', 'u.accessories', 'u.defects'])
+        .where('si.sale_id', '=', sourceId)
+        .orderBy('si.position')
+        .execute();
+      const withIds = [];
+      for (const i of items) withIds.push({ ...i, identifiers: await unitIdentifiers(trx, i.unit_id), unit_id: undefined });
+      const payments = await trx.selectFrom('sale_payments').select(['method_name', 'kind', 'amount_cents', 'installments', 'first_due_date']).where('sale_id', '=', sourceId).orderBy('position').execute();
+      return {
+        company, customer: await partySnapshot(trx, s.customer_id, true), number: s.number?.toString() ?? null, date: s.sale_date,
+        items: withIds, subtotalCents: s.subtotal_cents, discountCents: s.discount_cents, shippingCents: s.shipping_cents, totalCents: s.total_cents,
+        payments, origin: s.origin,
       };
     }
     case 'purchase_term': {
@@ -226,8 +249,48 @@ export async function retryDocument(deps: AppDeps, actor: Actor, id: string) {
   });
 }
 
-/** Solicita documento avulso (orçamento de rascunho, termo de garantia). */
+/** Solicita documento avulso (orçamento de rascunho, termo de garantia, contrato de venda). */
 export async function requestDocumentAction(deps: AppDeps, actor: Actor, docType: DocType, sourceType: string, sourceId: string) {
   requirePermission(actor, 'sales.view');
-  return tx(deps, actor, async (trx) => ({ id: await requestDocument(trx, actor, docType, sourceType, sourceId) }));
+  return tx(deps, actor, async (trx) => {
+    if (docType === 'sale_contract') {
+      const s = await trx.selectFrom('sales').select(['status']).where('id', '=', sourceId).executeTakeFirst();
+      if (!s) throw notFound('Venda');
+      if (!['confirmed', 'partially_returned'].includes(s.status)) throw conflict('Contrato de venda só para venda confirmada.');
+    }
+    return { id: await requestDocument(trx, actor, docType, sourceType, sourceId) };
+  });
+}
+
+const SHARE_DAYS = 30;
+const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
+
+/**
+ * Link para o cliente abrir o PDF sem login (válido por 30 dias). O token só existe no link;
+ * no banco fica o hash. Gerar de novo cria outro link; os anteriores continuam até expirar.
+ */
+export async function shareDocument(deps: AppDeps, actor: Actor, documentId: string): Promise<{ token: string; expiresAt: Date }> {
+  requirePermission(actor, 'sales.view');
+  const token = randomBytes(32).toString('base64url');
+  const expiresAt = new Date(Date.now() + SHARE_DAYS * 86_400_000);
+  await tx(deps, actor, async (trx) => {
+    const d = await trx.selectFrom('documents').select(['status']).where('id', '=', documentId).executeTakeFirst();
+    if (!d) throw notFound('Documento');
+    if (d.status !== 'ready') throw conflict('Documento ainda não foi gerado. Tente novamente em instantes.');
+    await trx.insertInto('document_shares').values({ token_hash: hashToken(token), tenant_id: actor.tenantId, document_id: documentId, expires_at: expiresAt, created_by: actor.userId }).execute();
+    await audit(trx, actor, 'document.shared', 'document', documentId, { expiresAt: expiresAt.toISOString() });
+  });
+  return { token, expiresAt };
+}
+
+/** Leitura pública pelo token do link: só o documento do link, só enquanto válido. */
+export async function readSharedDocument(deps: AppDeps, token: string): Promise<{ filename: string; data: Buffer }> {
+  if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw notFound('Documento');
+  const share = await deps.dbs.public.selectFrom('document_shares').select(['tenant_id', 'document_id']).where('token_hash', '=', hashToken(token)).executeTakeFirst();
+  if (!share) throw notFound('Documento');
+  const doc = await withTenant(deps.dbs.public, { tenantId: share.tenant_id }, (trx) =>
+    trx.selectFrom('documents').select(['doc_type', 'number', 'status', 'storage_key']).where('id', '=', share.document_id).executeTakeFirst(),
+  );
+  if (!doc || doc.status !== 'ready' || !doc.storage_key) throw notFound('Documento');
+  return { filename: `${DOC_LABEL[doc.doc_type as DocType] ?? 'documento'} ${doc.number}.pdf`, data: await deps.storage.get(doc.storage_key) };
 }
