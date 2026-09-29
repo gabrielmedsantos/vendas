@@ -59,5 +59,12 @@ test('encarte com 17 produtos com foto', async ({ browser }) => {
   const [pdf] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'PDF' }).click()]);
   await pdf.saveAs('../test-results/encarte-completo.pdf');
   await expect(page.getByText('PDF do encarte baixado.')).toBeVisible();
+  // Vídeo 9:16 animado: prévia tocando e MP4 gerado no navegador.
+  await expect(page.getByTestId('video-preview')).toBeVisible();
+  await page.getByRole('button', { name: 'Gerar vídeo' }).click();
+  await expect(page.getByText('Vídeo pronto.')).toBeVisible({ timeout: 180_000 });
+  const [mp4] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Baixar MP4' }).click()]);
+  expect(mp4.suggestedFilename()).toBe('mega-saldao.mp4');
+  await mp4.saveAs('../test-results/encarte.mp4');
   await ctx.close();
 });

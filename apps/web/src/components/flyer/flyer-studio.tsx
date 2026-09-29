@@ -15,6 +15,7 @@ import { useCan } from '@/lib/client/session';
 import { FlyerPageView, PAGE_H, PAGE_W, themeFrom, type FlyerItem } from './flyer-page';
 import { productCutout } from './cutout';
 import { dominantColors } from './logo-colors';
+import { VideoStudio } from './video-studio';
 
 interface Tenant {
   name: string; phone: string | null; address: Record<string, string>;
@@ -232,6 +233,7 @@ export function FlyerStudio() {
         </Card>
       </div>
 
+      <div className="flex min-w-0 flex-col gap-4">
       <Card title={`Prévia · ${pages.length} ${pages.length === 1 ? 'página' : 'páginas'}`} description="1080×1350 px, formato de post e status." action={
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="secondary" loading={busy === 'share'} disabled={!pages.length || !!busy} onClick={() => run('share')}><Share2 className="size-4" />Compartilhar</Button>
@@ -252,6 +254,8 @@ export function FlyerStudio() {
           </div>
         )}
       </Card>
+      <VideoStudio items={chosen} featured={featured} theme={theme} settings={settings} logoUrl={logoUrl} companyName={tenant.data!.name} cutout={cutout} fileName={name} />
+      </div>
     </div>
   );
 }
