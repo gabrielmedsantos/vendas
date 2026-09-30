@@ -1,4 +1,5 @@
 import { applyBps, toCents } from './money';
+import type { NarrationStyle } from './narration';
 
 /** Encarte digital: cálculos puros (preço dividido, preço no cartão, paginação, cores). */
 
@@ -21,6 +22,10 @@ export interface FlyerSettings {
   narration?: string;
   /** Voz da narração. */
   voice?: NarrationVoice;
+  /** Jeito de falar (padrão: comercial). */
+  voiceStyle?: NarrationStyle;
+  /** Trilha de fundo animada no vídeo (padrão: sim). */
+  music?: boolean;
 }
 
 export type NarrationVoice = 'pf_dora' | 'pm_alex' | 'pm_santa';
@@ -30,12 +35,13 @@ export const NARRATION_VOICES: { id: NarrationVoice; label: string }[] = [
   { id: 'pm_santa', label: 'Masculina (Santa)' },
 ];
 
-/** Narração sugerida a partir dos padrões da loja (garantia e parcelas). */
+/** Narração sugerida a partir dos padrões da loja (garantia e parcelas), em tom de anúncio. */
 export function defaultNarration(company: string, warrantyMonths: number, cardInstallments: number): string {
-  const parts = [`Compre na ${company.trim() || 'nossa loja'} com os melhores preços`];
-  if (warrantyMonths > 0) parts.push(`com ${warrantyMonths} ${warrantyMonths === 1 ? 'mês' : 'meses'} de garantia`);
-  if (cardInstallments > 1) parts.push(`parcelado em até ${cardInstallments} vezes no cartão`);
-  return `${parts.join(', ')}.`;
+  const parts = ['Olha só essas ofertas!', `Na ${company.trim() || 'nossa loja'} você encontra os melhores preços!`];
+  if (warrantyMonths > 0) parts.push(`Com ${warrantyMonths} ${warrantyMonths === 1 ? 'mês' : 'meses'} de garantia!`);
+  if (cardInstallments > 1) parts.push(`E parcela em até ${cardInstallments} vezes no cartão!`);
+  parts.push('Chama a gente e garanta já o seu!');
+  return parts.join(' ');
 }
 
 export const FLYER_DEFAULTS: FlyerSettings = {

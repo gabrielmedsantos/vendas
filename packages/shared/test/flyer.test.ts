@@ -51,7 +51,7 @@ describe('encarte', () => {
   });
 
   it('narração sugerida com garantia e parcelas', () => {
-    expect(defaultNarration('TechFlash Fortal', 3, 12)).toBe('Compre na TechFlash Fortal com os melhores preços, com 3 meses de garantia, parcelado em até 12 vezes no cartão.');
-    expect(defaultNarration('Loja', 0, 0)).toBe('Compre na Loja com os melhores preços.');
+    expect(defaultNarration('TechFlash Fortal', 3, 12)).toBe('Olha só essas ofertas! Na TechFlash Fortal você encontra os melhores preços! Com 3 meses de garantia! E parcela em até 12 vezes no cartão! Chama a gente e garanta já o seu!');
+    expect(defaultNarration('Loja', 0, 0)).toBe('Olha só essas ofertas! Na Loja você encontra os melhores preços! Chama a gente e garanta já o seu!');
   });
 });

@@ -79,11 +79,16 @@ test('encarte com 17 produtos com foto', async ({ browser }) => {
   await expect(page.getByTestId('video-preview')).toBeVisible();
   // Narração com voz padrão: ouvir antes e gerar o vídeo com áudio.
   await page.getByLabel('Texto falado').fill('Compre na TechFlash Fortal os mais baratos, com 3 meses de garantia, parcelado em até 12 vezes no cartão.');
+  await expect(page.getByLabel('Estilo')).toHaveValue('comercial'); // tom de anúncio por padrão
+  await expect(page.getByLabel('Trilha de fundo animada')).toBeChecked();
   const narr = page.waitForResponse((r) => r.url().includes('/api/v1/flyer/narration'));
   await page.getByRole('button', { name: 'Ouvir' }).click();
-  expect((await narr).status()).toBe(200);
-  await page.waitForTimeout(1500);
-  await expect(page.getByText(/supported source|Failed to load/)).toHaveCount(0); // o áudio toca (CSP libera blob:)
+  const res = await narr;
+  expect(res.status()).toBe(200);
+  expect(JSON.parse(res.request().postData() ?? '{}')).toMatchObject({ style: 'comercial' });
+  await expect(page.getByRole('button', { name: 'Parar' })).toBeVisible(); // voz + trilha tocando
+  await expect(page.getByText(/supported source|Failed to load/)).toHaveCount(0);
+  await page.getByRole('button', { name: 'Parar' }).click();
   await page.getByRole('button', { name: 'Gerar vídeo' }).click();
   await expect(page.getByText('Vídeo pronto.')).toBeVisible({ timeout: 180_000 });
   // O player do vídeo pronto carrega (mídia blob: permitida).

@@ -2,7 +2,7 @@ import 'server-only';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
 import * as A from '@gct/app';
-import { AppError, HEX_COLOR, PERMISSIONS, ROLE_LABELS, ROLES } from '@gct/shared';
+import { AppError, HEX_COLOR, NARRATION_SPEED, PERMISSIONS, ROLE_LABELS, ROLES, speechScript } from '@gct/shared';
 import { clientIp, fileResponse, getSession, queryObject, rateLimit, TENANT_COOKIE, type RouteDef } from './http';
 
 const p = A.parse;
@@ -114,6 +114,8 @@ export const routes: RouteDef[] = [
                   featured: z.array(z.string().uuid()).max(2).optional(),
                   narration: z.string().trim().max(600).optional(),
                   voice: z.enum(['pf_dora', 'pm_alex', 'pm_santa']).optional(),
+                  voiceStyle: z.enum(['comercial', 'natural']).optional(),
+                  music: z.boolean().optional(),
                 })
                 .nullable()
                 .optional(),
@@ -148,13 +150,16 @@ export const routes: RouteDef[] = [
       const input = p(z.object({
         text: z.string().trim().min(3, 'Escreva o texto da narração').max(600, 'Texto muito longo (máx. 600 caracteres)'),
         voice: z.enum(['pf_dora', 'pm_alex', 'pm_santa']).default('pf_dora'),
-        speed: z.number().min(0.7).max(1.3).default(1),
+        style: z.enum(['comercial', 'natural']).default('comercial'),
+        speed: z.number().min(0.7).max(1.3).optional(),
       }), await body());
+      const tts = { text: speechScript(input.text, input.style), voice: input.voice, style: input.style, speed: input.speed ?? NARRATION_SPEED[input.style] };
+      if (!tts.text) throw new AppError('validation_failed', 'Escreva o texto da narração.');
       const base = process.env.TTS_URL;
       if (!base) throw new AppError('unavailable', 'Narração indisponível neste servidor.');
       let res: Response;
       try {
-        res = await fetch(`${base.replace(/\/$/, '')}/synthesize`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input), signal: AbortSignal.timeout(90_000) });
+        res = await fetch(`${base.replace(/\/$/, '')}/synthesize`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(tts), signal: AbortSignal.timeout(90_000) });
       } catch {
         throw new AppError('unavailable', 'O serviço de voz não respondeu. Tente de novo em instantes.');
       }

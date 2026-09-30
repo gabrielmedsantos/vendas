@@ -345,7 +345,8 @@ export function FlyerStudio() {
           {mode === 'video' && (
             <VideoStudio items={chosen} featured={featured} theme={theme} settings={settings} logoUrl={logoUrl} companyName={tenant.data!.name} cutout={cutout} fileName={name}
         narration={settings.narration ?? defaultNarration(tenant.data!.name, listingDefaults(tenant.data!.settings.listing).warrantyMonths, settings.cardInstallments)}
-        voice={settings.voice ?? 'pf_dora'} onNarration={(t) => set('narration', t)} onVoice={(v) => set('voice', v)} canSave={can('settings.manage')} />
+        voice={settings.voice ?? 'pf_dora'} voiceStyle={settings.voiceStyle ?? 'comercial'} music={settings.music ?? true}
+        onNarration={(t) => set('narration', t)} onVoice={(v) => set('voice', v)} onVoiceStyle={(v) => set('voiceStyle', v)} onMusic={(on) => set('music', on)} canSave={can('settings.manage')} />
           )}
         </div>
       </div>

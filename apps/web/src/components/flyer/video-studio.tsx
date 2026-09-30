@@ -1,27 +1,27 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Clapperboard, Download, Mic, Play, Share2 } from 'lucide-react';
-import { NARRATION_VOICES, outroForNarration, paginateVideo, videoDuration, VIDEO_H, VIDEO_W, type FlyerSettings, type NarrationVoice } from '@gct/shared';
+import { Clapperboard, Download, Mic, Music, Play, Share2, Square } from 'lucide-react';
+import { NARRATION_START, NARRATION_STYLES, NARRATION_VOICES, outroForNarration, paginateVideo, videoDuration, VIDEO_H, VIDEO_W, type FlyerSettings, type NarrationStyle, type NarrationVoice } from '@gct/shared';
 import { Button, Field, FormError, Select, Textarea } from '@/components/ui';
 import { ApiError } from '@/lib/client/api';
 import { useToast } from '@/components/toast';
 import { productCutout } from './cutout';
 import type { FlyerItem, FlyerTheme } from './flyer-page';
 import { decodeNarration, encodeFlyerVideo, loadImage } from './video-encode';
+import { mixTrack, renderMusic } from './music';
 import { drawVideoFrame, type VideoData } from './video-render';
 
 const PREVIEW_W = 300;
 
-/** Vídeo animado 9:16 (1080×1920) do encarte: prévia ao vivo e geração do MP4 no navegador. */
 /** Busca a fala gerada pelo serviço interno de voz (WAV). Mesma frase e voz: reaproveita. */
 const narrationCache = new Map<string, Promise<ArrayBuffer>>();
-function fetchNarration(text: string, voice: NarrationVoice): Promise<ArrayBuffer> {
-  const key = `${voice}|${text}`;
+function fetchNarration(text: string, voice: NarrationVoice, style: NarrationStyle): Promise<ArrayBuffer> {
+  const key = `${voice}|${style}|${text}`;
   const hit = narrationCache.get(key);
   if (hit) return hit;
   const job = (async () => {
-    const res = await fetch('/api/v1/flyer/narration', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, voice }) });
+    const res = await fetch('/api/v1/flyer/narration', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, voice, style }) });
     if (!res.ok) {
       const e = (await res.json().catch(() => ({}))).error ?? {};
       throw new ApiError(res.status, e.code ?? 'error', e.message ?? 'Não foi possível gerar a narração.', e.fields);
@@ -33,13 +33,16 @@ function fetchNarration(text: string, voice: NarrationVoice): Promise<ArrayBuffe
   return job;
 }
 
-export function VideoStudio({ items, featured, theme, settings, logoUrl, companyName, cutout, fileName, narration, voice, onNarration, onVoice, canSave }: {
+/** Vídeo animado 9:16 (1080×1920) do encarte: prévia ao vivo e geração do MP4 no navegador. */
+export function VideoStudio({ items, featured, theme, settings, logoUrl, companyName, cutout, fileName, narration, voice, voiceStyle, music, onNarration, onVoice, onVoiceStyle, onMusic, canSave }: {
   items: FlyerItem[]; featured: Set<string>; theme: FlyerTheme; settings: FlyerSettings; logoUrl: string | null; companyName: string; cutout: boolean; fileName: string;
-  narration: string; voice: NarrationVoice; onNarration: (t: string) => void; onVoice: (v: NarrationVoice) => void; canSave: boolean;
+  narration: string; voice: NarrationVoice; voiceStyle: NarrationStyle; music: boolean;
+  onNarration: (t: string) => void; onVoice: (v: NarrationVoice) => void; onVoiceStyle: (s: NarrationStyle) => void; onMusic: (on: boolean) => void; canSave: boolean;
 }) {
   const [withVoice, setWithVoice] = useState(true);
   const [listening, setListening] = useState(false);
-  const player = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const player = useRef<{ ctx: AudioContext; src: AudioBufferSourceNode } | null>(null);
   const toast = useToast();
   const canvas = useRef<HTMLCanvasElement>(null);
   const [data, setData] = useState<VideoData | null>(null);
@@ -70,7 +73,8 @@ export function VideoStudio({ items, featured, theme, settings, logoUrl, company
 
   // Textos e cores mudam sem recarregar imagens.
   useEffect(() => { setData((d) => (d ? { ...d, theme, settings, companyName } : d)); }, [theme, settings, companyName]);
-  useEffect(() => { setVideo(null); }, [key, theme, settings, withVoice]);
+  useEffect(() => { setVideo(null); }, [key, theme, settings, withVoice, voiceStyle, music]);
+  useEffect(() => () => { void player.current?.ctx.close(); }, []);
 
   // Prévia tocando em loop.
   useEffect(() => {
@@ -90,28 +94,49 @@ export function VideoStudio({ items, featured, theme, settings, logoUrl, company
     return () => cancelAnimationFrame(raf);
   }, [data]);
 
+  const stop = () => {
+    const p = player.current;
+    player.current = null;
+    setPlaying(false);
+    if (p) { try { p.src.stop(); } catch { /* já parou */ } void p.ctx.close(); }
+  };
+
+  /** Voz (se ligada) no estilo escolhido, já em 48 kHz. */
+  const loadVoice = async (): Promise<AudioBuffer | null> => {
+    if (!withVoice || !narration.trim()) return null;
+    return decodeNarration((await fetchNarration(narration.trim(), voice, voiceStyle)).slice(0));
+  };
+
+  // Ouvir: toca a mesma mixagem do vídeo (voz + trilha), só a duração da fala.
   const listen = async () => {
+    stop();
     setError(null); setListening(true);
     try {
-      const wav = await fetchNarration(narration.trim(), voice);
-      player.current?.pause();
-      const url = URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }));
-      player.current = new Audio(url);
-      await player.current.play();
+      const v = await loadVoice();
+      const seconds = (v ? v.duration + 0.4 : 6) + 1.2;
+      const track = mixTrack(seconds, v, music ? await renderMusic(seconds) : null, 0.4);
+      const ctx = new AudioContext();
+      const src = ctx.createBufferSource();
+      src.buffer = track;
+      src.connect(ctx.destination);
+      src.onended = () => { if (player.current?.src === src) stop(); };
+      await ctx.resume();
+      src.start();
+      player.current = { ctx, src };
+      setPlaying(true);
     } catch (e) { setError(e); } finally { setListening(false); }
   };
 
   const generate = async () => {
     if (!data) return;
+    stop();
     setError(null); setProgress(0);
     try {
-      let voiceBuf: AudioBuffer | null = null;
-      let render = data;
-      if (withVoice && narration.trim()) {
-        voiceBuf = await decodeNarration((await fetchNarration(narration.trim(), voice)).slice(0));
-        render = { ...data, outro: outroForNarration(data.pages.length, voiceBuf.duration) };
-      }
-      const blob = await encodeFlyerVideo(render, setProgress, voiceBuf);
+      const v = await loadVoice();
+      const render = v ? { ...data, outro: outroForNarration(data.pages.length, v.duration) } : data;
+      const total = videoDuration(render.pages.length, render.outro);
+      const track = v || music ? mixTrack(total, v, music ? await renderMusic(total) : null, NARRATION_START) : null;
+      const blob = await encodeFlyerVideo(render, setProgress, track);
       if (video) URL.revokeObjectURL(video.url);
       setVideo({ url: URL.createObjectURL(blob), blob });
       toast('Vídeo pronto.');
@@ -150,27 +175,37 @@ export function VideoStudio({ items, featured, theme, settings, logoUrl, company
       </div>
 
       <div className="flex min-w-0 flex-col gap-4">
-        {step(1, 'Narração', 'Voz em português gerada no seu servidor', (
+        {step(1, 'Voz e trilha', 'Locução em português gerada no seu servidor', (
           <div className="flex flex-col gap-3 text-sm">
-            <label className="flex items-center gap-2 font-medium"><input type="checkbox" checked={withVoice} onChange={(e) => setWithVoice(e.target.checked)} /><Mic className="size-4" />Narração com voz</label>
+            <div className="flex flex-wrap gap-x-5 gap-y-2">
+              <label className="flex items-center gap-2 font-medium"><input type="checkbox" checked={withVoice} onChange={(e) => setWithVoice(e.target.checked)} /><Mic className="size-4" />Narração com voz</label>
+              <label className="flex items-center gap-2 font-medium"><input type="checkbox" checked={music} onChange={(e) => onMusic(e.target.checked)} /><Music className="size-4" />Trilha de fundo animada</label>
+            </div>
             {withVoice && (
               <>
-                <Field label="Texto falado" htmlFor="vd-narr" help={`${narration.length}/600 caracteres${canSave ? ' · salvo em “Salvar identidade e textos”' : ''}`}>
+                <Field label="Texto falado" htmlFor="vd-narr" help={`${narration.length}/600 caracteres · frases curtas com “!” soam mais animadas${canSave ? ' · salvo em “Salvar identidade e textos”' : ''}`}>
                   <Textarea id="vd-narr" rows={3} maxLength={600} value={narration} onChange={(e) => onNarration(e.target.value)} />
                 </Field>
-                <div className="flex flex-wrap items-end gap-2">
-                  <div className="min-w-48 flex-1">
-                    <Field label="Voz" htmlFor="vd-voice">
-                      <Select id="vd-voice" value={voice} onChange={(e) => onVoice(e.target.value as NarrationVoice)}>
-                        {NARRATION_VOICES.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
-                      </Select>
-                    </Field>
-                  </div>
-                  <Button variant="secondary" loading={listening} disabled={narration.trim().length < 3} onClick={listen}><Play className="size-4" />Ouvir</Button>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Field label="Estilo" htmlFor="vd-style" help={NARRATION_STYLES.find((x) => x.id === voiceStyle)?.hint}>
+                    <Select id="vd-style" value={voiceStyle} onChange={(e) => onVoiceStyle(e.target.value as NarrationStyle)}>
+                      {NARRATION_STYLES.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+                    </Select>
+                  </Field>
+                  <Field label="Voz" htmlFor="vd-voice">
+                    <Select id="vd-voice" value={voice} onChange={(e) => onVoice(e.target.value as NarrationVoice)}>
+                      {NARRATION_VOICES.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
+                    </Select>
+                  </Field>
                 </div>
                 <p className="text-xs text-muted">Se a fala for maior que a animação, o final do vídeo se estende para caber.</p>
               </>
             )}
+            <div>
+              {playing
+                ? <Button variant="secondary" onClick={stop}><Square className="size-4" />Parar</Button>
+                : <Button variant="secondary" loading={listening} disabled={(!withVoice || narration.trim().length < 3) && !music} onClick={listen}><Play className="size-4" />Ouvir</Button>}
+            </div>
           </div>
         ))}
         {step(2, 'Gerar o vídeo', 'MP4 1080×1920 feito no seu navegador (Chrome ou Edge)', (
