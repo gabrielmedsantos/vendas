@@ -2,8 +2,8 @@
 
 export type NarrationStyle = 'comercial' | 'natural';
 export const NARRATION_STYLES: { id: NarrationStyle; label: string; hint: string }[] = [
-  { id: 'comercial', label: 'Comercial (animado)', hint: 'Frases curtas com energia, ritmo mais rápido e volume nivelado.' },
-  { id: 'natural', label: 'Natural (calmo)', hint: 'Leitura corrida, no ritmo normal.' },
+  { id: 'natural', label: 'Natural', hint: 'Leitura corrida, no ritmo normal da voz (recomendado).' },
+  { id: 'comercial', label: 'Animado (experimental)', hint: 'Frase por frase, mais rápido. Pode soar mais artificial.' },
 ];
 
 /** Velocidade padrão de cada estilo (1 = ritmo normal da voz). */
@@ -17,6 +17,28 @@ function money(_m: string, int: string, dec: string | undefined): string {
   if (!cents) return r || 'zero reais';
   const c = `${cents} ${cents === 1 ? 'centavo' : 'centavos'}`;
   return r ? `${r} e ${c}` : c;
+}
+
+/**
+ * Pronúncia definida pela loja, uma regra por linha: "TechFlash = Ték Fléch".
+ * Troca a palavra inteira (sem diferenciar maiúsculas); linhas inválidas são ignoradas.
+ */
+export function parsePronunciation(rules: string | null | undefined): [string, string][] {
+  const out: [string, string][] = [];
+  for (const line of (rules ?? '').split('\n')) {
+    const m = /^\s*(\S.*?)\s*=\s*(\S.*?)\s*$/.exec(line);
+    if (m && m[1]!.length <= 60 && m[2]!.length <= 80) out.push([m[1]!, m[2]!]);
+  }
+  return out.slice(0, 50);
+}
+
+export function applyPronunciation(text: string, rules: string | null | undefined): string {
+  const list = parsePronunciation(rules);
+  if (!list.length) return text;
+  const map = new Map(list.map(([f, t]) => [f.toLocaleLowerCase('pt-BR'), t]));
+  // Uma passada só, regras mais longas primeiro ("Tech Flash Fortal" antes de "Tech Flash").
+  const alt = [...map.keys()].sort((a, b) => b.length - a.length).map((f) => f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  return text.replace(new RegExp(`(?<![\\p{L}\\p{N}])(?:${alt})(?![\\p{L}\\p{N}])`, 'giu'), (m) => map.get(m.toLocaleLowerCase('pt-BR')) ?? m);
 }
 
 /** Troca símbolos e abreviações comuns em anúncio por palavras que a voz lê bem. */
@@ -60,7 +82,8 @@ export function commercialPhrases(text: string): string[] {
 }
 
 /** Texto final enviado à voz: frases separadas por linha (o serviço de voz fala uma a uma). */
-export function speechScript(text: string, style: NarrationStyle): string {
-  return style === 'comercial' ? commercialPhrases(text).join('\n') : speakable(text);
+export function speechScript(text: string, style: NarrationStyle, pronunciation?: string | null): string {
+  const t = applyPronunciation(text, pronunciation);
+  return style === 'comercial' ? commercialPhrases(t).join('\n') : speakable(t);
 }
 

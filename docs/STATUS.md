@@ -84,3 +84,10 @@ pnpm test && pnpm test:int
 
 ## Anúncio: várias versões do texto
 - `buildListing({ version })` em `packages/shared/src/listing.ts`: versão 0 = texto clássico (inalterado); 1, 2, 3… sorteiam de forma determinística (produto + versão) título, abertura, frases de cada item, emojis, ordem dos blocos e chamada final, mantendo as mesmas informações (preço, garantia, entrega, cartão, frase de confiança). Botões "Gerar outra versão" e "Anterior" no modal Anunciar. Testes: unidade (7 versões distintas com as mesmas informações) e jornada E2E.
+
+## Narração: voz natural por padrão, pronúncia e "Minha voz"
+- Retorno do usuário: estilo comercial soou artificial e errava palavras. Medição com reconhecimento de fala (faster-whisper medium, só no ambiente de teste, fora do produto): Kokoro acerta ~92% das palavras; o erro recorrente era o nome da loja ("TechFlash Fortal" → "Teixe Flash Portal"). Grafia "Téc Flésh" corrige nas 3 vozes. Ajuste de fonemas no "r" (ɾə) não mudou o resultado e foi descartado.
+- Padrão volta a ser "Natural"; "Animado (experimental)" continua opcional.
+- Campo "Pronúncia" (settings.flyer.pronunciation, uma regra "palavra = como falar" por linha, até 50) aplicado antes da síntese (`applyPronunciation`).
+- "Minha voz": gravar pelo microfone (MediaRecorder, até 60 s) ou enviar arquivo de áudio; processado só no navegador (mono 48 kHz, corta silêncio, nivela volume) e não é salvo no servidor. Permissions-Policy passou a `microphone=(self)`.
+- Pendência para decidir com o usuário: voz neural paga (Google/Azure/ElevenLabs) exige conta e chave; não configurada.

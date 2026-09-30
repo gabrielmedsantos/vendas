@@ -116,6 +116,7 @@ export const routes: RouteDef[] = [
                   voice: z.enum(['pf_dora', 'pm_alex', 'pm_santa']).optional(),
                   voiceStyle: z.enum(['comercial', 'natural']).optional(),
                   music: z.boolean().optional(),
+                  pronunciation: z.string().max(2000).optional(),
                 })
                 .nullable()
                 .optional(),
@@ -150,10 +151,11 @@ export const routes: RouteDef[] = [
       const input = p(z.object({
         text: z.string().trim().min(3, 'Escreva o texto da narração').max(600, 'Texto muito longo (máx. 600 caracteres)'),
         voice: z.enum(['pf_dora', 'pm_alex', 'pm_santa']).default('pf_dora'),
-        style: z.enum(['comercial', 'natural']).default('comercial'),
+        style: z.enum(['comercial', 'natural']).default('natural'),
         speed: z.number().min(0.7).max(1.3).optional(),
+        pronunciation: z.string().max(2000).optional(),
       }), await body());
-      const tts = { text: speechScript(input.text, input.style), voice: input.voice, style: input.style, speed: input.speed ?? NARRATION_SPEED[input.style] };
+      const tts = { text: speechScript(input.text, input.style, input.pronunciation), voice: input.voice, style: input.style, speed: input.speed ?? NARRATION_SPEED[input.style] };
       if (!tts.text) throw new AppError('validation_failed', 'Escreva o texto da narração.');
       const base = process.env.TTS_URL;
       if (!base) throw new AppError('unavailable', 'Narração indisponível neste servidor.');

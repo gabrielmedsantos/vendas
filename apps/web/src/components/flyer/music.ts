@@ -115,3 +115,39 @@ export function mixTrack(totalSeconds: number, voice: AudioBuffer | null, music:
   if (peak > 0.97) { const k = 0.97 / peak; for (let i = 0; i < o.length; i++) o[i] = o[i]! * k; }
   return out;
 }
+
+/**
+ * Gravação do próprio usuário (microfone ou arquivo): vira mono 48 kHz, sem silêncio
+ * no começo e no fim, com volume nivelado (RMS da fala perto do da voz automática).
+ */
+export async function prepareRecording(data: ArrayBuffer): Promise<AudioBuffer> {
+  const decoded = await new OfflineAudioContext(1, RATE, RATE).decodeAudioData(data);
+  const n = decoded.length;
+  const mono = new Float32Array(n);
+  for (let c = 0; c < decoded.numberOfChannels; c++) {
+    const ch = decoded.getChannelData(c);
+    for (let i = 0; i < n; i++) mono[i]! += ch[i]! / decoded.numberOfChannels;
+  }
+  const hop = Math.round(0.02 * RATE);
+  const frames = Math.floor(n / hop);
+  const rms: number[] = [];
+  for (let f = 0; f < frames; f++) { let s = 0; for (let i = f * hop; i < (f + 1) * hop; i++) s += mono[i]! * mono[i]!; rms.push(Math.sqrt(s / hop)); }
+  const loud = Math.max(0, ...rms);
+  if (loud < 0.003) throw new Error('A gravação ficou sem som. Confira o microfone e grave de novo.');
+  const gate = loud * 0.08;
+  const first = rms.findIndex((r) => r > gate);
+  let last = rms.length - 1;
+  while (last > first && rms[last]! <= gate) last--;
+  const a = Math.max(0, (first - 5) * hop);
+  const z = Math.min(n, (last + 10) * hop);
+  const voiced = rms.slice(first, last + 1).filter((r) => r > gate);
+  const speech = Math.sqrt(voiced.reduce((s, r) => s + r * r, 0) / Math.max(1, voiced.length));
+  let k = 0.16 / Math.max(speech, 1e-4); // ≈ −16 dBFS na fala
+  let peak = 0;
+  for (let i = a; i < z; i++) peak = Math.max(peak, Math.abs(mono[i]!));
+  if (peak * k > 0.95) k = 0.95 / peak;
+  const out = new AudioBuffer({ length: Math.max(1, z - a), numberOfChannels: 1, sampleRate: RATE });
+  const o = out.getChannelData(0);
+  for (let i = a; i < z; i++) o[i - a] = mono[i]! * k;
+  return out;
+}

@@ -79,16 +79,21 @@ test('encarte com 17 produtos com foto', async ({ browser }) => {
   await expect(page.getByTestId('video-preview')).toBeVisible();
   // Narração com voz padrão: ouvir antes e gerar o vídeo com áudio.
   await page.getByLabel('Texto falado').fill('Compre na TechFlash Fortal os mais baratos, com 3 meses de garantia, parcelado em até 12 vezes no cartão.');
-  await expect(page.getByLabel('Estilo')).toHaveValue('comercial'); // tom de anúncio por padrão
+  await expect(page.getByLabel('Estilo')).toHaveValue('natural'); // leitura natural por padrão
+  await page.getByLabel('Pronúncia').fill('TechFlash = Téc Flésh');
   await expect(page.getByLabel('Trilha de fundo animada')).toBeChecked();
   const narr = page.waitForResponse((r) => r.url().includes('/api/v1/flyer/narration'));
   await page.getByRole('button', { name: 'Ouvir' }).click();
   const res = await narr;
   expect(res.status()).toBe(200);
-  expect(JSON.parse(res.request().postData() ?? '{}')).toMatchObject({ style: 'comercial' });
+  expect(JSON.parse(res.request().postData() ?? '{}')).toMatchObject({ style: 'natural', pronunciation: 'TechFlash = Téc Flésh' });
   await expect(page.getByRole('button', { name: 'Parar' })).toBeVisible(); // voz + trilha tocando
   await expect(page.getByText(/supported source|Failed to load/)).toHaveCount(0);
   await page.getByRole('button', { name: 'Parar' }).click();
+  // Minha voz: envia um áudio (gravado no celular, por exemplo); o vídeo sai com ele.
+  await page.getByRole('radio', { name: 'Minha voz' }).click();
+  await page.getByLabel('Arquivo de áudio da narração').setInputFiles({ name: 'minha-voz.wav', mimeType: 'audio/wav', buffer: toneWav(2) });
+  await expect(page.getByText(/minha-voz\.wav · 1,\d s/)).toBeVisible(); // silêncio das pontas cortado
   await page.getByRole('button', { name: 'Gerar vídeo' }).click();
   await expect(page.getByText('Vídeo pronto.')).toBeVisible({ timeout: 180_000 });
   // O player do vídeo pronto carrega (mídia blob: permitida).
@@ -103,3 +108,18 @@ test('encarte com 17 produtos com foto', async ({ browser }) => {
   await mp4.saveAs('../test-results/encarte.mp4');
   await ctx.close();
 });
+
+/** WAV de teste: 0,3 s de silêncio + tom com volume variando + silêncio (simula uma fala gravada). */
+function toneWav(seconds: number): Buffer {
+  const rate = 16000;
+  const n = Math.round(seconds * rate);
+  const b = Buffer.alloc(44 + n * 2);
+  b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22);
+  b.writeUInt32LE(rate, 24); b.writeUInt32LE(rate * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
+  for (let i = 0; i < n; i++) {
+    const t = i / rate;
+    const on = t > 0.3 && t < seconds - 0.3 ? 0.3 * (0.6 + 0.4 * Math.sin(2 * Math.PI * 3 * t)) : 0;
+    b.writeInt16LE(Math.round(on * Math.sin(2 * Math.PI * 220 * t) * 32767), 44 + i * 2);
+  }
+  return b;
+}

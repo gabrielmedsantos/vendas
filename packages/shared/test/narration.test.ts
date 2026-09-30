@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { commercialPhrases, speakable, speechScript } from '../src';
+import { applyPronunciation, commercialPhrases, parsePronunciation, speakable, speechScript } from '../src';
 
 describe('texto da narração', () => {
   it('troca símbolos de anúncio por palavras que a voz lê', () => {
@@ -22,5 +22,23 @@ describe('texto da narração', () => {
   it('natural mantém a leitura corrida; comercial separa por linha', () => {
     expect(speechScript('Oi, tudo bem com você. Tchau.', 'natural')).toBe('Oi, tudo bem com você. Tchau.');
     expect(speechScript('Oi, tudo bem com você. Tchau.', 'comercial')).toBe('Oi, tudo bem com você!\nTchau!');
+  });
+});
+
+describe('pronúncia da loja', () => {
+  const rules = 'TechFlash = Téc Flésh\nBluetooth=Blutúf\nlinha sem regra\n = vazio\nTech Flash Fortal = Téc Flésh Fortál';
+  it('troca a palavra inteira, sem diferenciar maiúsculas, regras longas primeiro', () => {
+    expect(applyPronunciation('Na TECHFLASH tem fone bluetooth.', rules)).toBe('Na Téc Flésh tem fone Blutúf.');
+    expect(applyPronunciation('Tech Flash Fortal', rules)).toBe('Téc Flésh Fortál');
+    expect(applyPronunciation('TechFlashes e SuperTechFlash ficam', rules)).toBe('TechFlashes e SuperTechFlash ficam');
+    expect(applyPronunciation('Sem regras', '')).toBe('Sem regras');
+    expect(parsePronunciation(rules)).toHaveLength(3);
+  });
+  it('não troca em cascata e aceita símbolos no termo', () => {
+    expect(applyPronunciation('a b', 'a = b\nb = c')).toBe('b c');
+    expect(applyPronunciation('Moto G(8) top', 'G(8) = gê oito')).toBe('Moto gê oito top');
+  });
+  it('entra antes da preparação do texto', () => {
+    expect(speechScript('Na TechFlash, por R$ 10', 'natural', rules)).toBe('Na Téc Flésh, por 10 reais');
   });
 });

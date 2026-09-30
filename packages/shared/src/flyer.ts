@@ -22,10 +22,12 @@ export interface FlyerSettings {
   narration?: string;
   /** Voz da narração. */
   voice?: NarrationVoice;
-  /** Jeito de falar (padrão: comercial). */
+  /** Jeito de falar (padrão: natural). */
   voiceStyle?: NarrationStyle;
   /** Trilha de fundo animada no vídeo (padrão: sim). */
   music?: boolean;
+  /** Correções de pronúncia, uma por linha: "TechFlash = Téc Flésh". */
+  pronunciation?: string;
 }
 
 export type NarrationVoice = 'pf_dora' | 'pm_alex' | 'pm_santa';
