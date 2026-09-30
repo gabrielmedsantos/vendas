@@ -112,6 +112,8 @@ export const routes: RouteDef[] = [
                   cardInstallments: z.number().int().min(0).max(24),
                   order: z.array(z.string().uuid()).max(500).optional(),
                   featured: z.array(z.string().uuid()).max(2).optional(),
+                  narration: z.string().trim().max(600).optional(),
+                  voice: z.enum(['pf_dora', 'pm_alex', 'pm_santa']).optional(),
                 })
                 .nullable()
                 .optional(),
@@ -138,6 +140,28 @@ export const routes: RouteDef[] = [
   },
   { method: 'DELETE', path: 'tenant/logo', handler: ({ deps, actor }) => A.removeBrandLogo(deps, actor) },
   { method: 'GET', path: 'flyer/products', handler: ({ deps, actor }) => A.listFlyerProducts(deps, actor) },
+  {
+    // Narração do vídeo do encarte: encaminha o texto ao serviço interno de voz (container tts) e devolve WAV.
+    method: 'POST', path: 'flyer/narration', rate: { max: 60, windowMs: 3600_000 },
+    handler: async ({ actor, body }) => {
+      A.requirePermission(actor, 'catalog.manage');
+      const input = p(z.object({
+        text: z.string().trim().min(3, 'Escreva o texto da narração').max(600, 'Texto muito longo (máx. 600 caracteres)'),
+        voice: z.enum(['pf_dora', 'pm_alex', 'pm_santa']).default('pf_dora'),
+        speed: z.number().min(0.7).max(1.3).default(1),
+      }), await body());
+      const base = process.env.TTS_URL;
+      if (!base) throw new AppError('unavailable', 'Narração indisponível neste servidor.');
+      let res: Response;
+      try {
+        res = await fetch(`${base.replace(/\/$/, '')}/synthesize`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input), signal: AbortSignal.timeout(90_000) });
+      } catch {
+        throw new AppError('unavailable', 'O serviço de voz não respondeu. Tente de novo em instantes.');
+      }
+      if (!res.ok) throw new AppError('unavailable', 'Não foi possível gerar a narração agora.');
+      return new Response(await res.arrayBuffer(), { headers: { 'content-type': 'audio/wav', 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' } });
+    },
+  },
   { method: 'POST', path: 'tenant/onboarding/dismiss', handler: ({ deps, actor }) => A.dismissOnboarding(deps, actor) },
   {
     method: 'GET', path: 'members',

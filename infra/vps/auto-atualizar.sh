@@ -70,7 +70,7 @@ rm -f "$ESTADO/falhou"
 log "OK: ${TAG} no ar"
 
 # Mantém só as 3 imagens mais recentes deste sistema (a em uso nunca é removida pelo Docker).
-for repo in gct-web gct-worker; do
+for repo in gct-web gct-worker gct-tts; do
   docker image ls "$repo" --format '{{.Tag}}' | tail -n +4 | while read -r t; do
     [ "$t" = "$TAG" ] || docker image rm "$repo:$t" >/dev/null 2>&1 || true
   done

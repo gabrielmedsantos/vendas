@@ -25,17 +25,27 @@ export function pageDuration(): number {
   return VIDEO_TIMING.enter + VIDEO_TIMING.hold + VIDEO_TIMING.exit;
 }
 
-export function videoDuration(pages: number): number {
-  return VIDEO_TIMING.intro + Math.max(pages, 0) * pageDuration() + VIDEO_TIMING.outro;
+/** `outro` permite estender o final (ex.: narração mais longa que a animação). */
+export function videoDuration(pages: number, outro: number = VIDEO_TIMING.outro): number {
+  return VIDEO_TIMING.intro + Math.max(pages, 0) * pageDuration() + Math.max(outro, VIDEO_TIMING.outro);
 }
 
-export function frameCount(pages: number, fps = VIDEO_FPS): number {
-  return Math.ceil(videoDuration(pages) * fps);
+export function frameCount(pages: number, fps = VIDEO_FPS, outro?: number): number {
+  return Math.ceil(videoDuration(pages, outro) * fps);
+}
+
+/** Final necessário para a narração caber inteira (começa em NARRATION_START e termina com folga). */
+export const NARRATION_START = 0.3;
+export function outroForNarration(pages: number, narrationSeconds: number): number {
+  const needed = NARRATION_START + narrationSeconds + 0.6;
+  const base = videoDuration(pages);
+  return VIDEO_TIMING.outro + Math.max(0, needed - base);
 }
 
 /** Em que parte do vídeo está o instante `t` (s). `p` = progresso 0..1 dentro da fase. */
-export function sceneAt(t: number, pages: number): VideoScene {
-  const { intro, enter, hold, exit, outro } = VIDEO_TIMING;
+export function sceneAt(t: number, pages: number, outroLen: number = VIDEO_TIMING.outro): VideoScene {
+  const { intro, enter, hold, exit } = VIDEO_TIMING;
+  const outro = Math.max(outroLen, VIDEO_TIMING.outro);
   if (t < intro) return { kind: 'intro', t, p: clamp01(t / intro) };
   let x = t - intro;
   const pd = pageDuration();

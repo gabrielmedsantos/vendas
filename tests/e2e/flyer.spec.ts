@@ -74,6 +74,11 @@ test('encarte com 17 produtos com foto', async ({ browser }) => {
   await expect(page.getByText('PDF do encarte baixado.')).toBeVisible();
   // Vídeo 9:16 animado: prévia tocando e MP4 gerado no navegador.
   await expect(page.getByTestId('video-preview')).toBeVisible();
+  // Narração com voz padrão: ouvir antes e gerar o vídeo com áudio.
+  await page.getByLabel('Texto falado').fill('Compre na TechFlash Fortal os mais baratos, com 3 meses de garantia, parcelado em até 12 vezes no cartão.');
+  const narr = page.waitForResponse((r) => r.url().includes('/api/v1/flyer/narration'));
+  await page.getByRole('button', { name: 'Ouvir' }).click();
+  expect((await narr).status()).toBe(200);
   await page.getByRole('button', { name: 'Gerar vídeo' }).click();
   await expect(page.getByText('Vídeo pronto.')).toBeVisible({ timeout: 180_000 });
   const [mp4] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Baixar MP4' }).click()]);

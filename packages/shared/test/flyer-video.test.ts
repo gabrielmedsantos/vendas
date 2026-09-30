@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardProgress, easeOutBack, frameCount, pageDuration, paginateVideo, sceneAt, seeded, videoDuration, VIDEO_TIMING } from '../src';
+import { outroForNarration, NARRATION_START, cardProgress, easeOutBack, frameCount, pageDuration, paginateVideo, sceneAt, seeded, videoDuration, VIDEO_TIMING } from '../src';
 
 describe('vídeo do encarte', () => {
   it('pagina 6 por página com destaques primeiro', () => {
@@ -33,5 +33,13 @@ describe('vídeo do encarte', () => {
   it('aleatório determinístico', () => {
     const a = seeded(7), b = seeded(7);
     expect([a(), a(), a()]).toEqual([b(), b(), b()]);
+  });
+
+  it('narração longa estende o final; curta não muda a duração', () => {
+    const base = videoDuration(1);
+    expect(outroForNarration(1, 2)).toBe(VIDEO_TIMING.outro);
+    const o = outroForNarration(1, base + 3);
+    expect(videoDuration(1, o)).toBeCloseTo(NARRATION_START + base + 3 + 0.6);
+    expect(sceneAt(videoDuration(1, o) - 0.01, 1, o).kind).toBe('outro');
   });
 });

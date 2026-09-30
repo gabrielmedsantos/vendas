@@ -23,6 +23,8 @@ x-app: &app
     AUTH_DATABASE_URL: postgres://gct_auth:${GCT_AUTH_PASSWORD:?}@db:5432/${DB_NAME:-gct}
     PLATFORM_DATABASE_URL: postgres://gct_platform:${GCT_PLATFORM_PASSWORD:?}@db:5432/${DB_NAME:-gct}
     PUBLIC_DATABASE_URL: postgres://gct_public:${GCT_PUBLIC_PASSWORD:?}@db:5432/${DB_NAME:-gct}
+    # Serviço interno de voz (narração dos vídeos). Se estiver fora do ar, só a narração fica indisponível.
+    TTS_URL: http://tts:8000
 
 services:
   db:
@@ -84,6 +86,22 @@ services:
       timeout: 5s
       start_period: 30s
       retries: 3
+
+  tts:
+    image: gct-tts:${APP_VERSION:-local}
+    build: { context: ./infra/tts }
+    restart: unless-stopped
+    init: true
+    read_only: true
+    # A biblioteca de fonemas (espeak-ng) é carregada a partir de /tmp: precisa de exec só aqui.
+    tmpfs: ["/tmp:exec,mode=1777"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    mem_limit: 1g
+    cpus: 1.5
+    logging: *logging
+    # Só na rede interna: sem acesso à internet e sem porta publicada.
+    networks: [internal]
 
   worker:
     <<: *app

@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Download, FileDown, GripVertical, ImageOff, ImagePlus, Palette, Share2, Star, Trash2, Wand2 } from 'lucide-react';
 import {
-  applyOrder, moveItem, BRAND_DEFAULTS, FLYER_DEFAULTS, HEX_COLOR, formatPercentBps, listingDefaults, paginateFlyer, paletteFromColors, parsePercentBps,
+  applyOrder, defaultNarration, moveItem, BRAND_DEFAULTS, FLYER_DEFAULTS, HEX_COLOR, formatPercentBps, listingDefaults, paginateFlyer, paletteFromColors, parsePercentBps,
   type BrandColors, type FlyerSettings, type ListingDefaults,
 } from '@gct/shared';
 import { Button, Card, cx, EmptyState, ErrorState, Field, FormError, Input, LinkButton, LoadingBlock, Select } from '@/components/ui';
@@ -322,7 +322,9 @@ export function FlyerStudio() {
           </div>
         )}
       </Card>
-      <VideoStudio items={chosen} featured={featured} theme={theme} settings={settings} logoUrl={logoUrl} companyName={tenant.data!.name} cutout={cutout} fileName={name} />
+      <VideoStudio items={chosen} featured={featured} theme={theme} settings={settings} logoUrl={logoUrl} companyName={tenant.data!.name} cutout={cutout} fileName={name}
+        narration={settings.narration ?? defaultNarration(tenant.data!.name, listingDefaults(tenant.data!.settings.listing).warrantyMonths, settings.cardInstallments)}
+        voice={settings.voice ?? 'pf_dora'} onNarration={(t) => set('narration', t)} onVoice={(v) => set('voice', v)} canSave={can('settings.manage')} />
       </div>
     </div>
   );

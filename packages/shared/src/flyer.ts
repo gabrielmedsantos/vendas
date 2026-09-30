@@ -17,6 +17,25 @@ export interface FlyerSettings {
   order?: string[];
   /** Produtos em destaque na capa (ids). */
   featured?: string[];
+  /** Texto falado no vídeo (vazio = sem narração). */
+  narration?: string;
+  /** Voz da narração. */
+  voice?: NarrationVoice;
+}
+
+export type NarrationVoice = 'pf_dora' | 'pm_alex' | 'pm_santa';
+export const NARRATION_VOICES: { id: NarrationVoice; label: string }[] = [
+  { id: 'pf_dora', label: 'Feminina (Dora)' },
+  { id: 'pm_alex', label: 'Masculina (Alex)' },
+  { id: 'pm_santa', label: 'Masculina (Santa)' },
+];
+
+/** Narração sugerida a partir dos padrões da loja (garantia e parcelas). */
+export function defaultNarration(company: string, warrantyMonths: number, cardInstallments: number): string {
+  const parts = [`Compre na ${company.trim() || 'nossa loja'} com os melhores preços`];
+  if (warrantyMonths > 0) parts.push(`com ${warrantyMonths} ${warrantyMonths === 1 ? 'mês' : 'meses'} de garantia`);
+  if (cardInstallments > 1) parts.push(`parcelado em até ${cardInstallments} vezes no cartão`);
+  return `${parts.join(', ')}.`;
 }
 
 export const FLYER_DEFAULTS: FlyerSettings = {

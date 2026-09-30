@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyOrder, moveItem, cardPrice, contrastRatio, formatPercentBps, paginateFlyer, paletteFromColors, parsePercentBps, readableOn, splitPrice, BRAND_DEFAULTS } from '../src';
+import { defaultNarration, applyOrder, moveItem, cardPrice, contrastRatio, formatPercentBps, paginateFlyer, paletteFromColors, parsePercentBps, readableOn, splitPrice, BRAND_DEFAULTS } from '../src';
 
 describe('encarte', () => {
   it('divide o preço em reais e centavos sem float', () => {
@@ -48,5 +48,10 @@ describe('encarte', () => {
     expect(moveItem(['a', 'b', 'c', 'd'], 3, 0)).toEqual(['d', 'a', 'b', 'c']);
     expect(moveItem(['a', 'b', 'c'], 0, 2)).toEqual(['b', 'c', 'a']);
     expect(moveItem(['a', 'b'], 5, 0)).toEqual(['a', 'b']);
+  });
+
+  it('narração sugerida com garantia e parcelas', () => {
+    expect(defaultNarration('TechFlash Fortal', 3, 12)).toBe('Compre na TechFlash Fortal com os melhores preços, com 3 meses de garantia, parcelado em até 12 vezes no cartão.');
+    expect(defaultNarration('Loja', 0, 0)).toBe('Compre na Loja com os melhores preços.');
   });
 });

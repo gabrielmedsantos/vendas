@@ -9,6 +9,7 @@ export type ErrorCode =
   | 'plan_limit'
   | 'rate_limited'
   | 'tenant_suspended'
+  | 'unavailable'
   | 'internal';
 
 const STATUS: Record<ErrorCode, number> = {
@@ -22,6 +23,7 @@ const STATUS: Record<ErrorCode, number> = {
   validation_failed: 422,
   rate_limited: 429,
   tenant_suspended: 403,
+  unavailable: 503,
   internal: 500,
 };
 

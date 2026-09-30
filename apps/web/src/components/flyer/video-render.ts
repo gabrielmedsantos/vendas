@@ -12,6 +12,8 @@ export interface VideoData {
   theme: FlyerTheme;
   settings: FlyerSettings;
   companyName: string;
+  /** Duração do final (s), estendida quando há narração longa. */
+  outro?: number;
 }
 
 const FONT = "'Inter Variable', Inter, system-ui, sans-serif";
@@ -324,7 +326,7 @@ function sparkles(ctx: Ctx, t: FlyerTheme, time: number, amount: number) {
 /** Desenha o quadro do instante `time` (segundos). Determinístico: mesmo tempo, mesmo quadro. */
 export function drawVideoFrame(ctx: Ctx, data: VideoData, time: number) {
   const n = data.pages.length;
-  const sc = sceneAt(time, n);
+  const sc = sceneAt(time, n, data.outro);
   background(ctx, data.theme, time);
   if (sc.kind === 'intro') {
     header(ctx, data, sc.p);
