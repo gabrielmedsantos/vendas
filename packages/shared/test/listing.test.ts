@@ -39,4 +39,26 @@ describe('anúncio', () => {
     const l = buildListing({ ...base, ...listingDefaults(null), name: 'X'.repeat(150) });
     expect(l.title.length).toBeLessThanOrEqual(99);
   });
+
+  it('outras versões: textos diferentes, mesmas informações, e a mesma versão sempre igual', () => {
+    const d = listingDefaults(null, 'Fortaleza');
+    const all = [0, 1, 2, 3, 4, 5, 6].map((version) => buildListing({ ...base, ...d, version }));
+    expect(new Set(all.map((l) => l.short)).size).toBe(all.length);
+    expect(new Set(all.map((l) => l.full)).size).toBe(all.length);
+    expect(new Set(all.map((l) => l.title)).size).toBeGreaterThan(2);
+    for (const l of all) {
+      expect(l.title.length).toBeLessThanOrEqual(99);
+      expect(l.title).toContain('iPhone 13 128 GB Azul');
+      for (const t of [l.short, l.full]) {
+        expect(t).toContain('R$ 3.299,00');
+        expect(t).toMatch(/3 meses/);
+        expect(t).toContain('Entregamos em toda Fortaleza e região');
+        expect(t).toMatch(/12x/);
+        expect(t).toContain('Compra segura e produtos originais');
+        expect(t).not.toContain('mau uso');
+      }
+    }
+    expect(buildListing({ ...base, ...d, version: 3 })).toEqual(all[3]);
+    expect(buildListing({ ...base, ...d })).toEqual(all[0]);
+  });
 });

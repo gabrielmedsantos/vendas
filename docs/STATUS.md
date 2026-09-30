@@ -81,3 +81,6 @@ pnpm test && pnpm test:int
 2. Quando autorizado: inventário da VPS (`docs/RUNBOOK.md` §1, via `prompts/03_PREPARAR_VPS.md`) e plano de instalação — sem deploy antes disso.
 3. Definir preços reais dos planos, provedor de e-mail (SMTP) e gateway de cobrança; ligar em sandbox e validar (fase 9).
 4. Referência BrikLucro: quando houver capturas da área interna, `prompts/04_ATUALIZAR_REFERENCIA_2.md`.
+
+## Anúncio: várias versões do texto
+- `buildListing({ version })` em `packages/shared/src/listing.ts`: versão 0 = texto clássico (inalterado); 1, 2, 3… sorteiam de forma determinística (produto + versão) título, abertura, frases de cada item, emojis, ordem dos blocos e chamada final, mantendo as mesmas informações (preço, garantia, entrega, cartão, frase de confiança). Botões "Gerar outra versão" e "Anterior" no modal Anunciar. Testes: unidade (7 versões distintas com as mesmas informações) e jornada E2E.

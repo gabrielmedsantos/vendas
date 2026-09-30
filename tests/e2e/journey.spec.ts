@@ -102,6 +102,16 @@ test.describe.serial('jornada completa', () => {
     await modal.getByLabel('Entrega').fill('Entregamos em toda Fortaleza e região');
     await modal.getByRole('button', { name: 'Salvar estas opções como padrão' }).click();
     await expect(page.getByText('Padrão de anúncio salvo para a empresa.')).toBeVisible();
+    // Outras versões: texto muda, informações continuam; "Anterior" volta exatamente ao texto de antes.
+    const v1 = await modal.getByLabel('Descrição curta').inputValue();
+    await modal.getByRole('button', { name: 'Gerar outra versão' }).click();
+    await expect(modal.getByText('Versão 2')).toBeVisible();
+    const v2 = await modal.getByLabel('Descrição curta').inputValue();
+    expect(v2).not.toBe(v1);
+    expect(v2).toMatch(/bateria 90%/);
+    await modal.getByRole('button', { name: 'Versão anterior' }).click();
+    await expect(modal.getByLabel('Descrição curta')).toHaveValue(v1);
+    await modal.getByRole('button', { name: 'Gerar outra versão' }).click();
     await modal.getByLabel('Descrição curta').scrollIntoViewIfNeeded();
     await page.screenshot({ path: '../test-results/anuncio.png' });
     await modal.getByRole('button', { name: 'Fechar' }).first().click();

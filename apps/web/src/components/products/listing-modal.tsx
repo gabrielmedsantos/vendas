@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { Copy, Download } from 'lucide-react';
+import { ChevronLeft, Copy, Download, Shuffle } from 'lucide-react';
 import { buildListing, listingDefaults, type ListingDefaults } from '@gct/shared';
 import { Button, ErrorState, Field, FormError, Input, LoadingBlock, Modal, MoneyInput, Select, Textarea } from '@/components/ui';
 import { useToast } from '@/components/toast';
@@ -24,6 +24,8 @@ export function ListingModal({ product, open, onClose }: { product: ListingProdu
   const t = useQuery({ queryKey: ['tenant'], queryFn: () => api<Tenant>('tenant'), enabled: open });
   const [o, setO] = useState<ListingDefaults & { variantId: string; priceCents: string; conditionNotes: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  // Versão do texto: 0 = clássica; cada clique em "Gerar outra versão" muda título, frases, emojis e ordem.
+  const [version, setVersion] = useState(0);
   const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
@@ -39,7 +41,7 @@ export function ListingModal({ product, open, onClose }: { product: ListingProdu
   }, [open, t.data, o, product]);
 
   const variant = product.variants.find((v) => v.id === o?.variantId);
-  const out = useMemo(() => (o ? buildListing({ ...o, name: product.name, brand: product.brand, description: product.description, variantLabel: variant?.label }) : null), [o, product, variant]);
+  const out = useMemo(() => (o ? buildListing({ ...o, name: product.name, brand: product.brand, description: product.description, variantLabel: variant?.label, version }) : null), [o, product, variant, version]);
 
   const copy = async (text: string, what: string) => {
     try { await navigator.clipboard.writeText(text); toast(`${what} copiado.`); } catch { toast('Não foi possível copiar; selecione o texto e copie.'); }
@@ -102,6 +104,14 @@ export function ListingModal({ product, open, onClose }: { product: ListingProdu
           )}
           <FormError error={error} />
 
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface-2/50 p-3">
+            <div className="mr-auto">
+              <p className="text-sm font-semibold">Versão {version + 1}{version === 0 ? ' · clássica' : ''}</p>
+              <p className="text-xs text-muted">Varie o texto entre anúncios: o Marketplace não gosta de textos repetidos.</p>
+            </div>
+            <Button variant="secondary" disabled={version === 0} onClick={() => setVersion((v) => Math.max(0, v - 1))} aria-label="Versão anterior"><ChevronLeft className="size-4" />Anterior</Button>
+            <Button onClick={() => setVersion((v) => v + 1)}><Shuffle className="size-4" />Gerar outra versão</Button>
+          </div>
           <Field label="Título" htmlFor="an-title">
             <div className="flex gap-2"><Input id="an-title" readOnly value={out.title} /><Button variant="secondary" aria-label="Copiar título" onClick={() => copy(out.title, 'Título')}><Copy className="size-4" /></Button></div>
           </Field>
