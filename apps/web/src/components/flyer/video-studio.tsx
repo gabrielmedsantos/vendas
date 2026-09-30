@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Clapperboard, Download, Mic, Play, Share2 } from 'lucide-react';
 import { NARRATION_VOICES, outroForNarration, paginateVideo, videoDuration, VIDEO_H, VIDEO_W, type FlyerSettings, type NarrationVoice } from '@gct/shared';
-import { Button, Card, Field, FormError, Select, Textarea } from '@/components/ui';
+import { Button, Field, FormError, Select, Textarea } from '@/components/ui';
 import { ApiError } from '@/lib/client/api';
 import { useToast } from '@/components/toast';
 import { productCutout } from './cutout';
@@ -11,7 +11,7 @@ import type { FlyerItem, FlyerTheme } from './flyer-page';
 import { decodeNarration, encodeFlyerVideo, loadImage } from './video-encode';
 import { drawVideoFrame, type VideoData } from './video-render';
 
-const PREVIEW_W = 270;
+const PREVIEW_W = 300;
 
 /** Vídeo animado 9:16 (1080×1920) do encarte: prévia ao vivo e geração do MP4 no navegador. */
 /** Busca a fala gerada pelo serviço interno de voz (WAV). Mesma frase e voz: reaproveita. */
@@ -127,27 +127,31 @@ export function VideoStudio({ items, featured, theme, settings, logoUrl, company
   };
 
   const secs = Math.round(videoDuration(pages.length));
+  const step = (n: number, title: string, hint: string, body: React.ReactNode) => (
+    <section className="rounded-2xl border border-line bg-surface p-4">
+      <header className="mb-3 flex items-center gap-3">
+        <span className="flex size-7 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary-soft">{n}</span>
+        <span><span className="block text-sm font-semibold">{title}</span><span className="block text-xs text-muted">{hint}</span></span>
+      </header>
+      {body}
+    </section>
+  );
   return (
-    <Card title="Vídeo animado (9:16)" description={`Formato de Status, Reels e Stories · 1080×1920 · ${pages.length} ${pages.length === 1 ? 'tela' : 'telas'} · cerca de ${secs} s`} action={
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" loading={progress !== null} disabled={!data || loading || !pages.length || progress !== null} onClick={generate}><Clapperboard className="size-4" />{video ? 'Gerar de novo' : 'Gerar vídeo'}</Button>
-        {video && <a className="inline-flex items-center gap-1.5 rounded-xl border border-line-strong px-3 py-1.5 text-sm hover:bg-surface-2" href={video.url} download={`${fileName}.mp4`}><Download className="size-4" />Baixar MP4</a>}
-        {video && <Button size="sm" variant="secondary" onClick={share}><Share2 className="size-4" />Compartilhar</Button>}
-      </div>
-    }>
-      <div className="flex flex-wrap items-start gap-6">
-        <div className="shrink-0 overflow-hidden rounded-2xl shadow-lg" style={{ width: PREVIEW_W, height: (PREVIEW_W * VIDEO_H) / VIDEO_W }}>
-          {pages.length ? <canvas ref={canvas} width={PREVIEW_W} height={(PREVIEW_W * VIDEO_H) / VIDEO_W} data-testid="video-preview" aria-label="Prévia do vídeo animado" /> : <p className="p-4 text-sm text-muted">Selecione produtos.</p>}
+    <div className="grid items-start gap-6 xl:grid-cols-[auto_minmax(0,1fr)]">
+      {/* Prévia dentro de um celular. */}
+      <div className="flex flex-col items-center gap-3">
+        <div className="rounded-[46px] border border-line-strong bg-black p-3 shadow-2xl ring-1 ring-white/5">
+          <div className="relative overflow-hidden rounded-[34px] bg-bg" style={{ width: PREVIEW_W, height: (PREVIEW_W * VIDEO_H) / VIDEO_W }}>
+            <span className="absolute left-1/2 top-2 z-10 h-5 w-24 -translate-x-1/2 rounded-full bg-black" aria-hidden />
+            {pages.length ? <canvas ref={canvas} width={PREVIEW_W} height={(PREVIEW_W * VIDEO_H) / VIDEO_W} data-testid="video-preview" aria-label="Prévia do vídeo animado" /> : <p className="p-6 pt-12 text-center text-sm text-muted">Selecione produtos no painel ao lado.</p>}
+          </div>
         </div>
-        <div className="flex min-w-0 flex-1 flex-col gap-3 text-sm">
-          {loading && <p className="text-muted">Preparando fotos…</p>}
-          {progress !== null && (
-            <div>
-              <p className="mb-1 text-muted">Gerando vídeo… {Math.round(progress * 100)}%</p>
-              <div className="h-2 overflow-hidden rounded-full bg-surface-2"><div className="h-full bg-primary transition-[width]" style={{ width: `${Math.round(progress * 100)}%` }} /></div>
-            </div>
-          )}
-          <div className="flex flex-col gap-2 rounded-xl border border-line bg-bg p-3">
+        <p className="text-xs text-muted">{pages.length} {pages.length === 1 ? 'tela' : 'telas'} · cerca de {secs} s · prévia em tempo real</p>
+      </div>
+
+      <div className="flex min-w-0 flex-col gap-4">
+        {step(1, 'Narração', 'Voz em português gerada no seu servidor', (
+          <div className="flex flex-col gap-3 text-sm">
             <label className="flex items-center gap-2 font-medium"><input type="checkbox" checked={withVoice} onChange={(e) => setWithVoice(e.target.checked)} /><Mic className="size-4" />Narração com voz</label>
             {withVoice && (
               <>
@@ -155,22 +159,43 @@ export function VideoStudio({ items, featured, theme, settings, logoUrl, company
                   <Textarea id="vd-narr" rows={3} maxLength={600} value={narration} onChange={(e) => onNarration(e.target.value)} />
                 </Field>
                 <div className="flex flex-wrap items-end gap-2">
-                  <Field label="Voz" htmlFor="vd-voice">
-                    <Select id="vd-voice" value={voice} onChange={(e) => onVoice(e.target.value as NarrationVoice)}>
-                      {NARRATION_VOICES.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
-                    </Select>
-                  </Field>
-                  <Button size="sm" variant="secondary" loading={listening} disabled={narration.trim().length < 3} onClick={listen}><Play className="size-4" />Ouvir</Button>
+                  <div className="min-w-48 flex-1">
+                    <Field label="Voz" htmlFor="vd-voice">
+                      <Select id="vd-voice" value={voice} onChange={(e) => onVoice(e.target.value as NarrationVoice)}>
+                        {NARRATION_VOICES.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
+                      </Select>
+                    </Field>
+                  </div>
+                  <Button variant="secondary" loading={listening} disabled={narration.trim().length < 3} onClick={listen}><Play className="size-4" />Ouvir</Button>
                 </div>
-                <p className="text-xs text-muted">A voz é gerada no seu servidor (sem serviço externo). Se a fala for maior que a animação, o final do vídeo se estende para caber.</p>
+                <p className="text-xs text-muted">Se a fala for maior que a animação, o final do vídeo se estende para caber.</p>
               </>
             )}
           </div>
-          {video && <video src={video.url} controls playsInline className="w-56 rounded-xl border border-line" aria-label="Vídeo gerado" />}
-          <p className="text-xs text-muted">A animação usa os mesmos produtos, fotos, logo, cores e textos do encarte. Até 6 produtos por tela; os destaques (estrela) aparecem primeiro. O vídeo é gerado no seu navegador, sem enviar nada para fora. Use Chrome ou Edge atualizados.</p>
-          <FormError error={error} />
-        </div>
+        ))}
+        {step(2, 'Gerar o vídeo', 'MP4 1080×1920 feito no seu navegador (Chrome ou Edge)', (
+          <div className="flex flex-col gap-3 text-sm">
+            <Button className="w-full sm:w-auto" loading={progress !== null} disabled={!data || loading || !pages.length || progress !== null} onClick={generate}><Clapperboard className="size-4" />{video ? 'Gerar de novo' : 'Gerar vídeo'}</Button>
+            {loading && <p className="text-muted">Preparando fotos…</p>}
+            {progress !== null && (
+              <div>
+                <p className="mb-1 text-muted">Gerando vídeo… {Math.round(progress * 100)}%</p>
+                <div className="h-2 overflow-hidden rounded-full bg-surface-2"><div className="h-full bg-primary transition-[width]" style={{ width: `${Math.round(progress * 100)}%` }} /></div>
+              </div>
+            )}
+            <FormError error={error} />
+          </div>
+        ))}
+        {step(3, 'Baixar ou enviar', video ? 'Pronto para Status, Reels e Stories' : 'Aparece aqui depois de gerar', video ? (
+          <div className="flex flex-wrap items-start gap-4">
+            <video src={video.url} controls playsInline className="w-44 rounded-xl border border-line" aria-label="Vídeo gerado" />
+            <div className="flex flex-col gap-2">
+              <a className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white hover:brightness-110" href={video.url} download={`${fileName}.mp4`}><Download className="size-4" />Baixar MP4</a>
+              <Button variant="secondary" onClick={share}><Share2 className="size-4" />Compartilhar</Button>
+            </div>
+          </div>
+        ) : <p className="text-sm text-muted">Nenhum vídeo gerado ainda.</p>)}
       </div>
-    </Card>
+    </div>
   );
 }

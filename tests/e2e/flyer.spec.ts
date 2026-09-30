@@ -50,7 +50,7 @@ test('encarte com 17 produtos com foto', async ({ browser }) => {
   await page.getByRole('tab', { name: 'Encarte digital' }).click();
   const preview = page.getByTestId('flyer-preview');
   await expect(preview).toContainText('Fone Bluetooth TWS');
-  await expect(page.getByText('Prévia · 3 páginas')).toBeVisible();
+  await expect(page.getByText('Página 3 de 3')).toBeVisible();
   // Ordem dos produtos: ordenar, mover com a seta e continuar igual depois de recarregar.
   const lista = page.getByRole('list', { name: 'Ordem dos produtos no encarte' });
   await page.getByLabel('Ordenar por').selectOption('priceDesc');
@@ -71,8 +71,11 @@ test('encarte com 17 produtos com foto', async ({ browser }) => {
   await expect(preview).toContainText('no cartão');
   const [pdf] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'PDF' }).click()]);
   await pdf.saveAs('../test-results/encarte-completo.pdf');
+  await page.screenshot({ path: '../test-results/encarte-layout.png', fullPage: false });
   await expect(page.getByText('PDF do encarte baixado.')).toBeVisible();
   // Vídeo 9:16 animado: prévia tocando e MP4 gerado no navegador.
+  await page.getByRole('tab', { name: 'Vídeo 9:16' }).click();
+  await page.screenshot({ path: '../test-results/encarte-video-layout.png', fullPage: true });
   await expect(page.getByTestId('video-preview')).toBeVisible();
   // Narração com voz padrão: ouvir antes e gerar o vídeo com áudio.
   await page.getByLabel('Texto falado').fill('Compre na TechFlash Fortal os mais baratos, com 3 meses de garantia, parcelado em até 12 vezes no cartão.');

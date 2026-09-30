@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, Download, FileDown, GripVertical, ImageOff, ImagePlus, Palette, Share2, Star, Trash2, Wand2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Clapperboard, Download, FileDown, GripVertical, ImageOff, ImagePlus, LayoutGrid, Package, Palette, Save, Share2, Star, Trash2, Type, Wand2 } from 'lucide-react';
 import {
   applyOrder, defaultNarration, moveItem, BRAND_DEFAULTS, FLYER_DEFAULTS, HEX_COLOR, formatPercentBps, listingDefaults, paginateFlyer, paletteFromColors, parsePercentBps,
   type BrandColors, type FlyerSettings, type ListingDefaults,
@@ -23,7 +23,6 @@ interface Tenant {
 }
 interface Product extends FlyerItem { categoryName: string | null; available: number }
 
-const PREVIEW_SCALE = 0.42;
 
 function defaultFooter(t: Tenant): string {
   const delivery = listingDefaults(t.settings.listing, t.address.city).delivery;
@@ -55,6 +54,7 @@ export function FlyerStudio() {
   const orderDirty = useRef(false);
   const [onlyPhoto, setOnlyPhoto] = useState(false);
   const [cutout, setCutout] = useState(true);
+  const [mode, setMode] = useState<'flyer' | 'video'>('flyer');
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState<'' | 'png' | 'pdf' | 'share' | 'logo' | 'save'>('');
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -186,9 +186,33 @@ export function FlyerStudio() {
   const toggle = (setFn: typeof setSelected, id: string) => setFn((cur) => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   return (
-    <div className="grid gap-4 2xl:grid-cols-[420px_1fr]">
-      <div className="flex flex-col gap-4">
-        <Card title="Identidade visual" description="O encarte usa a logo e as cores da sua marca.">
+    <div className="flex flex-col gap-4">
+      {/* Barra de comandos: modo, resumo e exportação; acompanha a rolagem. */}
+      <div className="sticky top-0 z-20 -mx-1 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-surface/95 px-4 py-3 shadow-lg backdrop-blur">
+        <div className="flex items-center gap-3">
+          <div role="tablist" aria-label="Formato" className="flex rounded-xl border border-line bg-bg p-1">
+            {([['flyer', 'Encarte', LayoutGrid], ['video', 'Vídeo 9:16', Clapperboard]] as const).map(([k, label, Icon]) => (
+              <button key={k} role="tab" aria-selected={mode === k} onClick={() => setMode(k)} className={cx('flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition', mode === k ? 'bg-primary text-white shadow' : 'text-muted hover:text-fg')}><Icon className="size-4" />{label}</button>
+            ))}
+          </div>
+          <p className="hidden text-sm text-muted sm:block">
+            <span className="font-medium text-fg">{chosen.length}</span> de {list.length} produtos · {mode === 'flyer' ? <><span className="font-medium text-fg">{pages.length}</span> {pages.length === 1 ? 'página' : 'páginas'} · 1080×1350</> : '1080×1920 · Status, Reels e Stories'}
+          </p>
+        </div>
+        {mode === 'flyer' && (
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" loading={busy === 'share'} disabled={!pages.length || !!busy} onClick={() => run('share')}><Share2 className="size-4" />Compartilhar</Button>
+            <Button size="sm" variant="secondary" loading={busy === 'png'} disabled={!pages.length || !!busy} onClick={() => run('png')}><Download className="size-4" />Imagens</Button>
+            <Button size="sm" loading={busy === 'pdf'} disabled={!pages.length || !!busy} onClick={() => run('pdf')}><FileDown className="size-4" />PDF</Button>
+          </div>
+        )}
+      </div>
+
+      <div className="grid items-start gap-4 lg:grid-cols-[380px_minmax(0,1fr)]">
+        {/* Painel de ajustes: fixo ao rolar, com rolagem própria. */}
+        <aside className="flex flex-col overflow-hidden rounded-2xl border border-line bg-surface lg:sticky lg:top-[84px] lg:max-h-[calc(100dvh-110px)]">
+          <div className="flex-1 overflow-y-auto">
+            <Section title="Identidade visual" hint="Logo e cores da marca" icon={<Palette className="size-4" />} open>
           <div className="flex items-center gap-3">
             <div className="flex h-16 w-32 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-line bg-white p-2">
               {logoUrl ? <img src={logoUrl} alt="Logo da empresa" className="max-h-full max-w-full object-contain" /> : <span className="text-xs text-neutral-500">Sem logo</span>}
@@ -206,21 +230,20 @@ export function FlyerStudio() {
           <div className="mt-3 grid grid-cols-3 gap-2">
             {([['primary', 'Cor do fundo'], ['secondary', 'Cor do preço'], ['accent', 'Cor do título']] as const).map(([k, label]) => (
               <Field key={k} label={label} htmlFor={`cor-${k}`}>
-                <div className="flex items-center gap-2">
-                  <input id={`cor-${k}`} type="color" value={HEX_COLOR.test(colors[k]) ? colors[k] : '#000000'} onChange={(e) => setColors({ ...colors, [k]: e.target.value })} className="h-9 w-10 shrink-0 cursor-pointer rounded-lg border border-line bg-transparent" />
-                  <Input aria-label={`${label} (hex)`} value={colors[k]} maxLength={7} onChange={(e) => setColors({ ...colors, [k]: e.target.value })} />
+                <div className="flex flex-col gap-1.5">
+                  <input id={`cor-${k}`} type="color" value={HEX_COLOR.test(colors[k]) ? colors[k] : '#000000'} onChange={(e) => setColors({ ...colors, [k]: e.target.value })} className="h-10 w-full cursor-pointer rounded-lg border border-line bg-transparent" />
+                  <Input aria-label={`${label} (hex)`} className="px-2 text-center font-mono text-xs uppercase" value={colors[k]} maxLength={7} onChange={(e) => setColors({ ...colors, [k]: e.target.value })} />
                 </div>
               </Field>
             ))}
           </div>
-        </Card>
-
-        <Card title="Textos">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Título" htmlFor="enc-title"><Input id="enc-title" maxLength={40} value={settings.title} onChange={(e) => set('title', e.target.value)} /></Field>
-            <Field label="Chamada" htmlFor="enc-sub"><Input id="enc-sub" maxLength={60} value={settings.subtitle} onChange={(e) => set('subtitle', e.target.value)} /></Field>
-            <div className="sm:col-span-2"><Field label="Rodapé" htmlFor="enc-foot" help="Entrega, WhatsApp, endereço."><Input id="enc-foot" maxLength={160} value={settings.footer} onChange={(e) => set('footer', e.target.value)} /></Field></div>
-            <div className="sm:col-span-2"><Field label="Validade das ofertas" htmlFor="enc-val" help="Ex.: Ofertas válidas de 01/10 a 31/10 ou enquanto durar o estoque."><Input id="enc-val" maxLength={80} value={settings.validity} onChange={(e) => set('validity', e.target.value)} /></Field></div>
+            </Section>
+            <Section title="Textos" hint="Título, rodapé, validade e cartão" icon={<Type className="size-4" />} open>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2"><Field label="Título" htmlFor="enc-title"><Input id="enc-title" maxLength={40} value={settings.title} onChange={(e) => set('title', e.target.value)} /></Field></div>
+            <div className="col-span-2"><Field label="Chamada" htmlFor="enc-sub"><Input id="enc-sub" maxLength={60} value={settings.subtitle} onChange={(e) => set('subtitle', e.target.value)} /></Field></div>
+            <div className="col-span-2"><Field label="Rodapé" htmlFor="enc-foot" help="Entrega, WhatsApp, endereço."><Input id="enc-foot" maxLength={160} value={settings.footer} onChange={(e) => set('footer', e.target.value)} /></Field></div>
+            <div className="col-span-2"><Field label="Validade das ofertas" htmlFor="enc-val" help="Ex.: Ofertas válidas de 01/10 a 31/10 ou enquanto durar o estoque."><Input id="enc-val" maxLength={80} value={settings.validity} onChange={(e) => set('validity', e.target.value)} /></Field></div>
             <Field label="Cartão" htmlFor="enc-card">
               <Select id="enc-card" value={String(settings.cardInstallments)} onChange={(e) => set('cardInstallments', Number(e.target.value))}>
                 <option value="0">Não mencionar</option><option value="1">Aceita cartão</option>
@@ -231,23 +254,19 @@ export function FlyerStudio() {
               <Input id="enc-sur" inputMode="decimal" placeholder="0" value={surcharge} invalid={!surchargeOk} onChange={(e) => { setSurcharge(e.target.value); const b = parsePercentBps(e.target.value); set('cardSurchargeBps', b ?? 0); }} />
             </Field>
           </div>
-          {can('settings.manage') && (
-            <div className="mt-3 flex justify-end"><Button variant="secondary" loading={busy === 'save'} disabled={!colorsOk || !surchargeOk} onClick={save}><Palette className="size-4" />Salvar identidade e textos</Button></div>
-          )}
-        </Card>
-
-        <Card title={`Produtos (${chosen.length} de ${list.length})`} description="Produtos ativos com estoque disponível. A estrela coloca o produto em destaque na capa (até 2)." action={
-          <div className="flex gap-1">
-            <Button size="sm" variant="quiet" onClick={() => setSelected(new Set(list.map((p) => p.id)))}>Todos</Button>
-            <Button size="sm" variant="quiet" onClick={() => setSelected(new Set())}>Nenhum</Button>
-          </div>
-        }>
+            </Section>
+            <Section title={`Produtos · ${chosen.length} de ${list.length}`} hint="Ordem, destaques e fotos" icon={<Package className="size-4" />} open action={
+              <span className="flex gap-1">
+                <Button size="sm" variant="quiet" onClick={() => setSelected(new Set(list.map((p) => p.id)))}>Todos</Button>
+                <Button size="sm" variant="quiet" onClick={() => setSelected(new Set())}>Nenhum</Button>
+              </span>
+            }>
           <label className="mb-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={onlyPhoto} onChange={(e) => setOnlyPhoto(e.target.checked)} />Somente produtos com foto</label>
           <label className="mb-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={cutout} onChange={(e) => setCutout(e.target.checked)} />Remover fundo das fotos</label>
           <p className="mb-2 text-xs text-muted">Tira fundos lisos (branco, cinza ou cor única) e corta as margens. Fotos com fundo cheio de detalhes ficam como estão.</p>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <label className="flex items-center gap-2 text-sm">Ordenar por
-              <Select aria-label="Ordenar por" className="w-44" value="" onChange={(e) => {
+            <label className="flex min-w-0 flex-1 items-center gap-2 whitespace-nowrap text-sm">Ordenar por
+              <Select aria-label="Ordenar por" className="min-w-0 flex-1" value="" onChange={(e) => {
                 const k = e.target.value;
                 const ps = [...ordered];
                 const cmp: Record<string, (a: Product, b: Product) => number> = {
@@ -298,34 +317,76 @@ export function FlyerStudio() {
               </li>
             ))}
           </ul>
-        </Card>
-      </div>
-
-      <div className="flex min-w-0 flex-col gap-4">
-      <Card title={`Prévia · ${pages.length} ${pages.length === 1 ? 'página' : 'páginas'}`} description="1080×1350 px, formato de post e status." action={
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="secondary" loading={busy === 'share'} disabled={!pages.length || !!busy} onClick={() => run('share')}><Share2 className="size-4" />Compartilhar</Button>
-          <Button size="sm" variant="secondary" loading={busy === 'png'} disabled={!pages.length || !!busy} onClick={() => run('png')}><Download className="size-4" />Imagens</Button>
-          <Button size="sm" loading={busy === 'pdf'} disabled={!pages.length || !!busy} onClick={() => run('pdf')}><FileDown className="size-4" />PDF</Button>
-        </div>
-      }>
-        <FormError error={error} />
-        {pages.length === 0 ? <p className="text-sm text-muted">Selecione ao menos um produto.</p> : (
-          <div className="flex flex-wrap gap-4" data-testid="flyer-preview">
-            {pages.map((pg, i) => (
-              <div key={i} style={{ width: PAGE_W * PREVIEW_SCALE, height: PAGE_H * PREVIEW_SCALE }} className="shrink-0 overflow-hidden rounded-xl shadow-lg">
-                <div style={{ transform: `scale(${PREVIEW_SCALE})`, transformOrigin: 'top left', width: PAGE_W, height: PAGE_H }}>
-                  <FlyerPageView ref={(el) => { pageRefs.current[i] = el; }} page={pg} index={i} total={pages.length} theme={theme} settings={settings} logoUrl={logoUrl} companyName={tenant.data!.name} cutout={cutout} />
-                </div>
-              </div>
-            ))}
+            </Section>
           </div>
-        )}
-      </Card>
-      <VideoStudio items={chosen} featured={featured} theme={theme} settings={settings} logoUrl={logoUrl} companyName={tenant.data!.name} cutout={cutout} fileName={name}
+          {can('settings.manage') && (
+            <div className="border-t border-line bg-surface-2/60 p-3">
+              <Button className="w-full" variant="secondary" loading={busy === 'save'} disabled={!colorsOk || !surchargeOk} onClick={save}><Save className="size-4" />Salvar identidade e textos</Button>
+            </div>
+          )}
+        </aside>
+
+        <div className="flex min-w-0 flex-col gap-4">
+          <FormError error={error} />
+          {mode === 'flyer' && (
+            pages.length === 0 ? <Card><p className="py-10 text-center text-sm text-muted">Selecione ao menos um produto no painel ao lado.</p></Card> : (
+              <div className="grid gap-5 sm:grid-cols-2 2xl:grid-cols-3" data-testid="flyer-preview">
+                {pages.map((pg, i) => (
+                  <figure key={i} className="flex flex-col gap-2">
+                    <ScaledPage>
+                      <FlyerPageView ref={(el) => { pageRefs.current[i] = el; }} page={pg} index={i} total={pages.length} theme={theme} settings={settings} logoUrl={logoUrl} companyName={tenant.data!.name} cutout={cutout} />
+                    </ScaledPage>
+                    <figcaption className="text-center text-xs text-muted">Página {i + 1} de {pages.length}</figcaption>
+                  </figure>
+                ))}
+              </div>
+            )
+          )}
+          {mode === 'video' && (
+            <VideoStudio items={chosen} featured={featured} theme={theme} settings={settings} logoUrl={logoUrl} companyName={tenant.data!.name} cutout={cutout} fileName={name}
         narration={settings.narration ?? defaultNarration(tenant.data!.name, listingDefaults(tenant.data!.settings.listing).warrantyMonths, settings.cardInstallments)}
         voice={settings.voice ?? 'pf_dora'} onNarration={(t) => set('narration', t)} onVoice={(v) => set('voice', v)} canSave={can('settings.manage')} />
+          )}
+        </div>
       </div>
+    </div>
+  );
+}
+
+/** Seção recolhível do painel de ajustes. */
+function Section({ title, hint, icon, open, action, children }: { title: string; hint: string; icon: React.ReactNode; open?: boolean; action?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <details open={open} className="group border-b border-line last:border-b-0">
+      <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 hover:bg-surface-2/60 [&::-webkit-details-marker]:hidden">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary-soft">{icon}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold">{title}</span>
+          <span className="block text-xs text-muted">{hint}</span>
+        </span>
+        <ChevronDown className="size-4 text-muted transition group-open:rotate-180" />
+      </summary>
+      <div className="flex flex-col px-4 pb-4 pt-1">
+        {action && <div className="mb-2 flex justify-end">{action}</div>}
+        {children}
+      </div>
+    </details>
+  );
+}
+
+/** Página 1080×1350 reduzida para a largura disponível (sem distorcer; exportação usa o tamanho real). */
+function ScaledPage({ children }: { children: React.ReactNode }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(0.4);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setScale(e!.contentRect.width / PAGE_W));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return (
+    <div ref={box} className="relative w-full overflow-hidden rounded-2xl shadow-xl ring-1 ring-white/5" style={{ aspectRatio: `${PAGE_W} / ${PAGE_H}` }}>
+      <div className="absolute left-0 top-0" style={{ width: PAGE_W, height: PAGE_H, transform: `scale(${scale})`, transformOrigin: 'top left' }}>{children}</div>
     </div>
   );
 }
