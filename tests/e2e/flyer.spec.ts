@@ -82,8 +82,17 @@ test('encarte com 17 produtos com foto', async ({ browser }) => {
   const narr = page.waitForResponse((r) => r.url().includes('/api/v1/flyer/narration'));
   await page.getByRole('button', { name: 'Ouvir' }).click();
   expect((await narr).status()).toBe(200);
+  await page.waitForTimeout(1500);
+  await expect(page.getByText(/supported source|Failed to load/)).toHaveCount(0); // o áudio toca (CSP libera blob:)
   await page.getByRole('button', { name: 'Gerar vídeo' }).click();
   await expect(page.getByText('Vídeo pronto.')).toBeVisible({ timeout: 180_000 });
+  // O player do vídeo pronto carrega (mídia blob: permitida).
+  await page.getByLabel('Vídeo gerado').evaluate((v: HTMLVideoElement) => new Promise((ok, fail) => {
+    if (v.readyState >= 2) return ok(1);
+    v.addEventListener('loadeddata', () => ok(1), { once: true });
+    v.addEventListener('error', () => fail(new Error('vídeo não carregou')), { once: true });
+    v.load();
+  }));
   const [mp4] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Baixar MP4' }).click()]);
   expect(mp4.suggestedFilename()).toBe('mega-saldao.mp4');
   await mp4.saveAs('../test-results/encarte.mp4');

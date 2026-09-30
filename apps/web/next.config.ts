@@ -8,6 +8,8 @@ const csp = [
   `script-src 'self' 'unsafe-inline'${isProd ? '' : " 'unsafe-eval'"}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
+  // Áudio da narração e vídeo gerados no navegador (URL blob: da própria página).
+  "media-src 'self' blob:",
   "font-src 'self' data:",
   "connect-src 'self'",
   "frame-ancestors 'none'",
