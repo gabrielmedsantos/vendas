@@ -546,12 +546,14 @@ export async function searchSellable(deps: AppDeps, actor: Actor, term: string, 
     const variants = await sql<{
       variant_id: string; product_id: string; name: string; sku: string; label: string; kind: string; tracking: string;
       retail_price_cents: bigint; wholesale_price_cents: bigint | null; wholesale_min_qty: number | null; available: number; unit_cost_cents: bigint | null;
+      image_id: string | null;
     }>`
       select v.id as variant_id, p.id as product_id, p.name, v.sku, v.label, p.kind, p.tracking,
              v.retail_price_cents, v.wholesale_price_cents, v.wholesale_min_qty,
              coalesce((select sum(b.on_hand - b.reserved) from stock_balances b where b.variant_id = v.id), 0)::int as available,
              (select case when sum(l.qty_remaining) > 0 then round(sum(l.cost_remaining_cents) / sum(l.qty_remaining))::bigint end
-                from inventory_lots l where l.variant_id = v.id and l.status = 'available' and l.qty_remaining > 0) as unit_cost_cents
+                from inventory_lots l where l.variant_id = v.id and l.status = 'available' and l.qty_remaining > 0) as unit_cost_cents,
+             (select pi.attachment_id from product_images pi where pi.product_id = p.id order by pi.position limit 1) as image_id
       from product_variants v join products p on p.id = v.product_id
       where v.status = 'active' and ${opts.includeInactive ? sql`p.status <> 'archived'` : sql`p.status = 'active'`}
         and (${norm === '' ? sql`true` : sql`p.search_text like ${'%' + norm + '%'} or lower(v.sku) = ${term.toLowerCase()} or v.barcode = ${term}`})
@@ -609,7 +611,8 @@ export async function getSellableVariant(deps: AppDeps, actor: Actor, variantId:
              v.retail_price_cents, v.wholesale_price_cents, v.wholesale_min_qty,
              coalesce((select sum(b.on_hand - b.reserved) from stock_balances b where b.variant_id = v.id), 0)::int as available,
              (select case when sum(l.qty_remaining) > 0 then round(sum(l.cost_remaining_cents) / sum(l.qty_remaining))::bigint end
-                from inventory_lots l where l.variant_id = v.id and l.status = 'available' and l.qty_remaining > 0) as unit_cost_cents
+                from inventory_lots l where l.variant_id = v.id and l.status = 'available' and l.qty_remaining > 0) as unit_cost_cents,
+             (select pi.attachment_id from product_images pi where pi.product_id = p.id order by pi.position limit 1) as image_id
       from product_variants v join products p on p.id = v.product_id where v.id = ${variantId}`.execute(trx);
     const row = r.rows[0];
     if (!row) throw notFound('Produto');

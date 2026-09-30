@@ -47,6 +47,12 @@ test('encarte com 17 produtos com foto', async ({ browser }) => {
 
   const page = await ctx.newPage();
   await page.goto('/app/catalogo');
+  // Catálogo: produto com foto adicionado pela busca aparece com a foto na prévia na hora (sem salvar nem recarregar).
+  await page.getByPlaceholder(/Buscar produto/).fill('Fone Bluetooth TWS');
+  await page.getByRole('button', { name: /Fone Bluetooth TWS/ }).click();
+  const fotoPrevia = page.getByRole('img', { name: 'Fone Bluetooth TWS' });
+  await expect(fotoPrevia).toBeVisible();
+  await expect.poll(() => fotoPrevia.evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth)).toBeGreaterThan(0);
   await page.getByRole('tab', { name: 'Encarte digital' }).click();
   const preview = page.getByTestId('flyer-preview');
   await expect(preview).toContainText('Fone Bluetooth TWS');

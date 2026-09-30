@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { ExternalLink, Monitor, Smartphone, Trash2 } from 'lucide-react';
+import { ExternalLink, Monitor, Package, Smartphone, Trash2 } from 'lucide-react';
 import { ProductPicker } from '@/components/ops/product-picker';
 import { FlyerStudio } from '@/components/flyer/flyer-studio';
 import { CatalogView } from '@/components/storefront/catalog-view';
@@ -71,9 +71,9 @@ export default function CatalogAdmin() {
               </div>
             </Card>
             <Card title="Produtos no catálogo" description={`${items.length} item(ns)`}>
-              <ProductPicker onPick={(v) => setItems((s) => (s.some((x) => x.variantId === v.variantId) ? s : [...s, { variantId: v.variantId, name: v.name, sku: v.sku, label: v.label, retailPriceCents: v.retailPriceCents, status: 'active' }]))} />
+              <ProductPicker onPick={(v) => setItems((s) => (s.some((x) => x.variantId === v.variantId) ? s : [...s, { variantId: v.variantId, name: v.name, sku: v.sku, label: v.label, retailPriceCents: v.retailPriceCents, status: 'active', imageId: v.imageId ?? null }]))} />
               <ul className="mt-3 flex flex-col gap-2">{items.map((i) => (
-                <li key={i.variantId} className="flex items-center justify-between rounded-xl border border-line bg-bg px-3 py-2 text-sm"><span>{i.name}{i.label ? ` · ${i.label}` : ''} <span className="text-xs text-muted">{i.sku}</span></span><span className="flex items-center gap-2"><span className="tabular">{brl(i.retailPriceCents)}</span><button aria-label={`Remover ${i.name}`} onClick={() => setItems(items.filter((x) => x.variantId !== i.variantId))} className="text-muted hover:text-danger-soft"><Trash2 className="size-4" /></button></span></li>
+                <li key={i.variantId} className="flex items-center justify-between gap-2 rounded-xl border border-line bg-bg px-3 py-2 text-sm"><span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line bg-surface-2" title={i.imageId ? undefined : 'Produto sem foto'}>{i.imageId ? <img src={`/api/v1/attachments/${i.imageId}`} alt="" className="size-full object-cover" loading="lazy" /> : <Package className="size-4 text-muted" aria-label="Sem foto" />}</span><span className="min-w-0 flex-1">{i.name}{i.label ? ` · ${i.label}` : ''} <span className="text-xs text-muted">{i.sku}</span></span><span className="flex items-center gap-2"><span className="tabular">{brl(i.retailPriceCents)}</span><button aria-label={`Remover ${i.name}`} onClick={() => setItems(items.filter((x) => x.variantId !== i.variantId))} className="text-muted hover:text-danger-soft"><Trash2 className="size-4" /></button></span></li>
               ))}</ul>
             </Card>
             <FormError error={error} />

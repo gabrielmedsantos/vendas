@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Barcode, Search } from 'lucide-react';
+import { Barcode, Package, Search } from 'lucide-react';
 import { api, qs } from '@/lib/client/api';
 import { brl } from '@/lib/client/format';
 import { Badge, Input } from '@/components/ui';
@@ -24,6 +24,8 @@ export interface PickedVariant {
   unitId?: string;
   unitCode?: string;
   unitCostCentsSpecific?: string | null;
+  /** Primeira foto do produto, se houver. */
+  imageId?: string | null;
 }
 
 interface SearchResult {
@@ -68,7 +70,10 @@ export function ProductPicker({ onPick, placeholder = 'Buscar produto, SKU, cód
           ))}
           {q.data && q.data.variants.map((v) => (
             <button key={v.variantId} type="button" onClick={() => { onPick(v); setTerm(''); }} className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-surface-3">
-              <span className="min-w-0">
+              <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line bg-surface-2" aria-hidden>
+                {v.imageId ? <img src={`/api/v1/attachments/${v.imageId}`} alt="" className="size-full object-cover" loading="lazy" /> : <Package className="size-4 text-muted" />}
+              </span>
+              <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium">{v.name}{v.label ? ` · ${v.label}` : ''}</span>
                 <span className="block text-xs text-muted">{v.sku} · {v.kind === 'service' ? 'serviço' : `${v.available} disponível(is)`}{v.tracking === 'serialized' ? ' · por unidade' : ''}</span>
               </span>
