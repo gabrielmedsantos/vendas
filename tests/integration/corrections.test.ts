@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '@gct/db';
 import {
-  balanceBreakdown, cancelExpense, cancelPurchase, confirmSale, createExpense, deleteProduct, getProduct, listAccounts, listCashMovements, quickPurchase, recordCashMovement, reverseCashMovement,
+  balanceBreakdown, cancelExpense, cancelPurchase, cancelSale, confirmSale, listSales, zSaleList, createExpense, deleteProduct, getProduct, listAccounts, listCashMovements, quickPurchase, recordCashMovement, reverseCashMovement,
   zCashMovement, zExpense, zPurchase, zSale, zStatement, type Actor,
 } from '@gct/app';
 import { closeDeps, createTenant, makeParty, makeProduct, reconcile, testDeps, todayIn, type TenantFixture } from './helpers';
@@ -85,5 +85,30 @@ describe('corrigir lançamentos sem apagar histórico', () => {
     const usado = await makeProduct(deps, actor, { name: 'Produto com compra' });
     await quickPurchase(deps, actor, zPurchase.parse({ supplierId: sup, purchaseDate: todayIn(actor), items: [{ variantId: usado.variantId, quantity: 1, unitCostCents: '1000' }], paymentTerms: { mode: 'due', dueDate: todayIn(actor) } }), randomUUID());
     await expect(deleteProduct(deps, actor, usado.productId)).rejects.toMatchObject({ code: 'conflict' });
+  });
+
+  it('cancelar venda de teste: valor volta para a conta, item volta direto ao estoque, sai das ativas e fica marcada como cancelada', async () => {
+    const p = await makeProduct(deps, actor, { name: 'Poltrona Teste', priceCents: 13000n });
+    await quickPurchase(deps, actor, zPurchase.parse({ supplierId: sup, purchaseDate: todayIn(actor), items: [{ variantId: p.variantId, quantity: 1, unitCostCents: '7400' }], paymentTerms: { mode: 'pay_now', accountId: conta, method: 'pix' } }), randomUUID());
+    const before = await saldo();
+    const r = await confirmSale(deps, actor, zSale.parse({ items: [{ variantId: p.variantId, quantity: 1, unitPriceCents: '13000' }], payments: [{ kind: 'pix', amountCents: '13000' }] }), randomUUID());
+    expect(await saldo()).toBe(before + 13000n);
+    expect(await onHand(p.productId)).toBe(0);
+    const key = randomUUID();
+    const c = await cancelSale(deps, actor, r.saleId, { reason: 'Venda de teste', restock: true, refund: { mode: 'refund', payNow: { accountId: conta, method: 'pix' } } }, key);
+    await cancelSale(deps, actor, r.saleId, { reason: 'Venda de teste', restock: true, refund: { mode: 'refund', payNow: { accountId: conta, method: 'pix' } } }, key); // repetir não duplica
+    expect(BigInt(c.refundCents as unknown as string)).toBe(13000n);
+    expect(await saldo()).toBe(before);
+    expect(await onHand(p.productId)).toBe(1); // disponível de novo, sem passar por inspeção
+    const insp = await withTenant(deps.dbs.app, actor, (trx) => trx.selectFrom('stock_balances').select(['inspection']).where('variant_id', '=', p.variantId).executeTakeFirstOrThrow());
+    expect(insp.inspection).toBe(0);
+    const ativas = await listSales(deps, actor, zSaleList.parse({ status: 'all_confirmed' }));
+    expect(ativas.data.some((x) => x.id === r.saleId)).toBe(false);
+    const canceladas = await listSales(deps, actor, zSaleList.parse({ status: 'returned' }));
+    expect(canceladas.data.find((x) => x.id === r.saleId)).toMatchObject({ was_canceled: true });
+    // Registro original preservado; resultado do período volta a zero para essa venda.
+    const sale = await withTenant(deps.dbs.app, actor, (trx) => trx.selectFrom('sales').select(['status', 'total_cents']).where('id', '=', r.saleId).executeTakeFirstOrThrow());
+    expect(sale).toEqual({ status: 'returned', total_cents: 13000n });
+    expect(await reconcile(deps, actor)).toEqual([]);
   });
 });

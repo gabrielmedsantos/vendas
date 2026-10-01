@@ -347,7 +347,7 @@ export const routes: RouteDef[] = [
   {
     method: 'POST', path: 'sales/:id/cancel',
     handler: async ({ deps, actor, params, body, idempotencyKey }) =>
-      A.cancelSale(deps, actor, id(params), p(zReason.extend({ refund: A.zRefund.optional() }), await body()), idempotencyKey),
+      A.cancelSale(deps, actor, id(params), p(zReason.extend({ refund: A.zRefund.optional(), restock: z.boolean().optional() }), await body()), idempotencyKey),
   },
   { method: 'GET', path: 'channels', handler: ({ deps, actor }) => A.listChannels(deps, actor) },
   { method: 'POST', path: 'channels', handler: async ({ deps, actor, body }) => A.saveChannel(deps, actor, p(A.zChannel, await body())) },

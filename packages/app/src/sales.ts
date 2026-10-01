@@ -416,12 +416,14 @@ export async function listSales(deps: AppDeps, actor: Actor, q: z.infer<typeof z
         ...(showCost ? (['s.cost_total_cents', 's.fees_total_cents', 's.returned_cost_cents'] as const) : []),
         sql<string>`(select string_agg(distinct sp.method_name, ', ') from sale_payments sp where sp.sale_id = s.id)`.as('payment_methods'),
         sql<number>`(select coalesce(sum(quantity),0) from sale_items si where si.sale_id = s.id)::int`.as('items_qty'),
+        sql<boolean>`exists(select 1 from returns r where r.sale_id = s.id and r.kind = 'cancellation')`.as('was_canceled'),
         sql<number>`count(*) over ()::int`.as('total'),
       ]);
     if (q.status === 'draft') query = query.where('s.status', '=', 'draft');
     else if (q.status === 'confirmed') query = query.where('s.status', '=', 'confirmed');
     else if (q.status === 'returned') query = query.where('s.status', 'in', ['partially_returned', 'returned', 'reversed']);
-    else if (q.status === 'all_confirmed') query = query.where('s.status', 'not in', ['draft', 'canceled']);
+    // Ativas: confirmadas e com devolução parcial; as totalmente devolvidas/canceladas ficam na aba própria.
+    else if (q.status === 'all_confirmed') query = query.where('s.status', 'not in', ['draft', 'canceled', 'returned', 'reversed']);
     if (q.from) query = query.where('s.sale_date', '>=', q.from);
     if (q.to) query = query.where('s.sale_date', '<=', q.to);
     if (q.channelId) query = query.where('s.channel_id', '=', q.channelId);

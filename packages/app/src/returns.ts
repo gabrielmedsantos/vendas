@@ -44,7 +44,7 @@ export async function returnInTx(
   actor: Actor,
   saleId: string,
   input: ReturnInput,
-  opts: { kind?: 'return' | 'cancellation'; refundOverride?: 'reversal' } = {},
+  opts: { kind?: 'return' | 'cancellation'; refundOverride?: 'reversal'; restock?: boolean } = {},
 ): Promise<ReturnResult> {
   const sale = await trx.selectFrom('sales').selectAll().where('id', '=', saleId).forUpdate().executeTakeFirst();
   if (!sale) throw notFound('Venda');
@@ -81,7 +81,7 @@ export async function returnInTx(
         const c = proportionalShare(a.quantity, a.cost_cents, a.returned_qty, a.returned_cost_cents, take);
         await trx.updateTable('sale_cost_allocations').set({ returned_qty: a.returned_qty + take, returned_cost_cents: a.returned_cost_cents + c }).where('id', '=', a.id).execute();
         const { lotId } = await stockIn(trx, actor, {
-          variantId: si.variant_id, locationId: loc, quantity: take, costCents: c, bucket: 'inspection', lotSource: 'sale_return',
+          variantId: si.variant_id, locationId: loc, quantity: take, costCents: c, bucket: opts.restock ? 'available' : 'inspection', lotSource: 'sale_return',
           kind: 'sale_return', sourceType: 'return', sourceId: ret.id, unitId: a.unit_id, reason: input.reason,
         });
         itemRows.push({ sale_item_id: si.id, quantity: take, revenue_cents: revenueRows === 0 ? itemRevenue : 0n, cost_cents: c, unit_id: a.unit_id, lot_id: lotId });
@@ -186,7 +186,8 @@ export async function returnSale(deps: AppDeps, actor: Actor, saleId: string, in
 }
 
 /** Cancelamento de venda confirmada = devolução de todos os itens remanescentes. Original intacto. */
-export async function cancelSale(deps: AppDeps, actor: Actor, saleId: string, input: { reason: string; refund?: z.infer<typeof zRefund> }, idempotencyKey?: string) {
+/** `restock`: os itens não chegaram a sair (venda lançada por engano) e voltam direto ao estoque, sem inspeção. */
+export async function cancelSale(deps: AppDeps, actor: Actor, saleId: string, input: { reason: string; refund?: z.infer<typeof zRefund>; restock?: boolean }, idempotencyKey?: string) {
   requirePermission(actor, 'reversals.execute');
   requireWritable(actor);
   return tx(deps, actor, async (trx) => {
@@ -197,7 +198,7 @@ export async function cancelSale(deps: AppDeps, actor: Actor, saleId: string, in
       const items = await trx.selectFrom('sale_items').select(['id', 'quantity', 'returned_qty']).where('sale_id', '=', saleId).execute();
       const pending = items.filter((i) => i.quantity > i.returned_qty).map((i) => ({ saleItemId: i.id, quantity: i.quantity - i.returned_qty }));
       if (pending.length === 0) throw conflict('Venda já totalmente devolvida.');
-      return returnInTx(trx, actor, saleId, { items: pending, reason: input.reason, refund: input.refund }, { kind: 'cancellation' });
+      return returnInTx(trx, actor, saleId, { items: pending, reason: input.reason, refund: input.refund }, { kind: 'cancellation', restock: input.restock === true });
     });
     return result;
   });

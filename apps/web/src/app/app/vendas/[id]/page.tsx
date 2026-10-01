@@ -36,6 +36,8 @@ export default function SaleDetail() {
   const [qty, setQty] = useState<Record<string, string>>({});
   const [reason, setReason] = useState('');
   const [refund, setRefund] = useState({ mode: 'refund', payNow: false, accountId: '', method: 'pix' });
+  // Cancelamento de venda lançada por engano: itens não saíram, voltam direto ao estoque.
+  const [restock, setRestock] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const [key, setKey] = useState(newKey);
@@ -52,10 +54,10 @@ export default function SaleDetail() {
   const submit = async () => {
     setBusy(true); setError(null);
     try {
-      if (mode === 'cancel') await api(`sales/${id}/cancel`, { body: { reason, refund: refundBody() }, idempotencyKey: key });
+      if (mode === 'cancel') await api(`sales/${id}/cancel`, { body: { reason, refund: refundBody(), restock }, idempotencyKey: key });
       else await api(`sales/${id}/returns`, { body: { reason, refund: refundBody(), items: d.items.map((i) => ({ saleItemId: i.id, quantity: Number(qty[i.id] || 0) })).filter((x) => x.quantity > 0) }, idempotencyKey: key });
       await qc.invalidateQueries();
-      toast(mode === 'cancel' ? 'Venda cancelada; estorno registrado.' : 'Devolução registrada; itens em inspeção.');
+      toast(mode === 'cancel' ? `Venda cancelada; estorno registrado${restock ? ' e itens de volta ao estoque' : ''}.` : 'Devolução registrada; itens em inspeção.');
       setMode(null); setKey(newKey());
     } catch (e) { setError(e); } finally { setBusy(false); }
   };
@@ -69,7 +71,7 @@ export default function SaleDetail() {
           <Badge tone={s.status === 'confirmed' ? 'success' : 'warning'}>{STATUS_LABEL[s.status]}</Badge>
           {s.tradeId && <Link className="text-sm text-primary-soft" href={`/app/trocas/${s.tradeId}`}>Ver troca</Link>}
           {canReturn && <Button variant="secondary" onClick={() => { setMode('return'); setQty({}); setReason(''); }}><RotateCcw className="size-4" />Devolução</Button>}
-          {canReturn && s.status === 'confirmed' && <Button variant="danger" onClick={() => { setMode('cancel'); setReason(''); }}><XCircle className="size-4" />Cancelar venda</Button>}
+          {canReturn && s.status === 'confirmed' && <Button variant="danger" onClick={() => { setMode('cancel'); setReason(''); setRestock(true); setRefund((r) => ({ ...r, mode: 'refund', payNow: can('finance.settle_payable') })); }}><XCircle className="size-4" />Cancelar venda</Button>}
         </>}
       />
       <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
@@ -127,12 +129,16 @@ export default function SaleDetail() {
         <Button variant="danger" loading={busy} onClick={submit}>{mode === 'cancel' ? 'Confirmar cancelamento' : 'Confirmar devolução'}</Button>
       </>}>
         <div className="flex flex-col gap-3 text-sm">
-          <p className="text-muted">A venda original não é apagada: um estorno vinculado reverte receita e custo pelos valores históricos. Itens voltam em inspeção. Primeiro é abatido o saldo em aberto ({formatBRL(open)}); o que já foi pago vira reembolso ou crédito da loja.</p>
+          <p className="text-muted">A venda original não é apagada: um estorno vinculado reverte receita e custo pelos valores históricos. {mode === 'cancel' && restock ? 'Itens voltam direto ao estoque.' : 'Itens voltam em inspeção.'} Primeiro é abatido o saldo em aberto ({formatBRL(open)}); o que já foi pago vira reembolso ou crédito da loja.</p>
           {mode === 'return' && d.items.filter((i) => i.quantity > i.returnedQty).map((i) => (
             <Field key={i.id} label={`${i.description} (devolvível ${i.quantity - i.returnedQty})`} htmlFor={`ret-${i.id}`}>
               <Input id={`ret-${i.id}`} type="number" min={0} max={i.quantity - i.returnedQty} value={qty[i.id] ?? ''} onChange={(e) => setQty({ ...qty, [i.id]: e.target.value })} />
             </Field>
           ))}
+          {mode === 'cancel' && d.items.some((i) => i.productKind === 'physical') && (
+            <label className="flex items-start gap-2"><input type="checkbox" className="mt-0.5 accent-[var(--color-primary)]" checked={restock} onChange={(e) => setRestock(e.target.checked)} />
+              <span>Os produtos não saíram da loja (venda lançada por engano ou de teste): voltar direto ao estoque, sem inspeção.</span></label>
+          )}
           <Field label="Motivo" htmlFor="rreason" required><Input id="rreason" value={reason} onChange={(e) => setReason(e.target.value)} /></Field>
           <Field label="Valor já pago" htmlFor="rmode">
             <Select id="rmode" value={refund.mode} onChange={(e) => setRefund({ ...refund, mode: e.target.value })}>
