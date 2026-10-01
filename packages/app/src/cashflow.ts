@@ -27,6 +27,13 @@ export const CASH_CATEGORY_LABEL: Record<CashCategory, string> = {
   transfer: 'Transferências entre contas',
 };
 
+/** Uma linha do fluxo de caixa (movimento do livro + origem). */
+export interface CashFlowRow {
+  id: string; occurred_on: string; direction: 'in' | 'out'; amount_cents: bigint; kind: string; origin_type: string; description: string | null;
+  account_id: string; account_name: string; created_at: Date; reversal_of: string | null; reversed: boolean; hidden: boolean;
+  title_origin: string | null; title_origin_id: string | null; title_description: string | null; party_name: string | null; category: CashCategory;
+}
+
 export const zCashFlow = zPageQuery.extend({
   from: zLocalDate.optional(),
   to: zLocalDate.optional(),
@@ -128,7 +135,7 @@ export async function cashFlow(deps: AppDeps, actor: Actor, q: z.infer<typeof zC
     });
 
     const term = q.q?.replace(/[%_]/g, '');
-    const list = await sql<Record<string, unknown> & { total: number }>`
+    const list = await sql<CashFlowRow & { total: number }>`
       with base as (${BASE(from, to, q.accountId)})
       select b.*, count(*) over ()::int as total from base b
       where not b.hidden
@@ -140,7 +147,7 @@ export async function cashFlow(deps: AppDeps, actor: Actor, q: z.infer<typeof zC
       order by b.occurred_on desc, b.created_at desc, b.id
       limit ${q.limit + 1} offset ${offset}`.execute(trx);
     const total = list.rows[0]?.total ?? 0;
-    const rows = list.rows.map(({ total: _t, ...r }) => ({ ...r, category_label: CASH_CATEGORY_LABEL[r.category as CashCategory] }));
+    const rows = list.rows.map(({ total: _t, ...r }) => ({ ...r, category_label: CASH_CATEGORY_LABEL[r.category] }));
 
     const open = await sql<{ direction: string; cents: bigint; overdue: bigint }>`
       select direction, coalesce(sum(balance_cents), 0)::bigint as cents,

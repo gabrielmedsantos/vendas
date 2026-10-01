@@ -165,11 +165,11 @@ test.describe.serial('jornada completa', () => {
     expect(link).toMatch(/\/d\/[A-Za-z0-9_-]{43}$/);
     await expect(page.getByRole('link', { name: /Enviar pelo WhatsApp/ })).toHaveAttribute('href', /wa\.me/);
     await page.screenshot({ path: '../test-results/enviar-contrato.png' });
-    const anon = await page.context().browser()!.newContext();
-    const res = await anon.request.get(new URL(link).pathname, { baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:3000' });
+    const anon = await page.context().browser()!.newContext({ baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:3000' });
+    const res = await anon.request.get(new URL(link).pathname);
     expect(res.status()).toBe(200);
     expect(res.headers()['content-type']).toContain('application/pdf');
-    expect((await anon.request.get('/d/' + 'x'.repeat(43), { baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:3000' })).status()).toBe(404);
+    expect((await anon.request.get('/d/' + 'x'.repeat(43))).status()).toBe(404);
     await anon.close();
     await page.getByRole('dialog').getByRole('button', { name: 'Fechar' }).first().click();
   });

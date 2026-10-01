@@ -308,7 +308,7 @@ describe('devolução e cancelamento', () => {
     const p = await makeProduct(deps, actor, { name: 'Perda Demo' });
     await stockUp(deps, actor, supplier, [{ variantId: p.variantId, quantity: 3, unitCostCents: 700n }]);
     const r = await adjustStock(deps, actor, zAdjustment.parse({ variantId: p.variantId, direction: 'out', kind: 'loss', quantity: 2, reason: 'Avaria no transporte' }));
-    expect(r.costCents).toBe(1400n);
+    expect((r as { costCents: bigint }).costCents).toBe(1400n);
     await expect(adjustStock(deps, actor, zAdjustment.parse({ variantId: p.variantId, direction: 'out', kind: 'loss', quantity: 5, reason: 'demais' }))).rejects.toMatchObject({ code: 'insufficient_stock' });
     const seller = await addMember(deps, T.tenantId, 'seller');
     await expect(adjustStock(deps, seller, zAdjustment.parse({ variantId: p.variantId, direction: 'out', kind: 'loss', quantity: 1, reason: 'sem permissão' }))).rejects.toMatchObject({ code: 'forbidden' });
