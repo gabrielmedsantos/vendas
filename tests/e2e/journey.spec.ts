@@ -280,12 +280,15 @@ test.describe.serial('jornada completa', () => {
   test('conta única: unificar contas antigas em uma só', async () => {
     const base = process.env.E2E_BASE_URL ?? 'http://localhost:3000';
     await page.goto('/app/financeiro');
+    await expect(page.getByRole('heading', { name: 'Fluxo de caixa' })).toBeVisible();
+    await page.getByText('Contas e conferência').click();
     await expect(page.getByText('Conta da loja').first()).toBeVisible();
     await expect(page.getByRole('button', { name: 'Unificar contas' })).toHaveCount(0);
     // Empresa com a configuração antiga (caixa separado).
     const res = await page.request.post('/api/v1/finance/accounts', { data: { name: 'Caixa antigo', kind: 'cash' }, headers: { origin: base } });
     expect(res.ok(), await res.text()).toBeTruthy();
     await page.reload();
+    await page.getByText('Contas e conferência').click();
     await page.getByRole('button', { name: 'Unificar contas' }).click();
     const modal = page.getByRole('dialog');
     await expect(modal.getByLabel('Nome da conta')).toHaveValue('Conta da loja');
@@ -303,9 +306,18 @@ test.describe.serial('jornada completa', () => {
     await adj.getByRole('button', { name: 'Ajustar', exact: true }).click();
     await expect(page.getByText('Saldo ajustado.')).toBeVisible();
     await expect(page.getByText('R$ 1.161,00').first()).toBeVisible();
-    await expect(page.getByText('De onde vem o saldo')).toBeVisible();
+    await expect(page.getByText('De onde vem o saldo', { exact: true })).toBeVisible();
     await expect(page.getByText('Vendas recebidas')).toBeVisible();
     await expect(page.getByText('Ajustes de saldo (conferência)')).toBeVisible();
+    // Fluxo de caixa: lista com origem, filtro por tipo e exportação.
+    await expect(page.getByText('Entradas no período')).toBeVisible();
+    const lanc = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Lançamentos' }) });
+    await expect(lanc.getByRole('link', { name: 'Ver venda' }).first()).toBeVisible();
     await page.screenshot({ path: '../test-results/financeiro.png', fullPage: true });
+    await page.getByLabel('Tipo').selectOption('out');
+    await expect(lanc.locator('tbody tr').first()).toContainText('Saída');
+    await expect(lanc.locator('tbody tr').filter({ hasText: 'Entrada' })).toHaveCount(0);
+    const [csv] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Exportar CSV' }).click()]);
+    expect(csv.suggestedFilename()).toMatch(/^fluxo-de-caixa-\d{4}-\d{2}-\d{2}-a-\d{4}-\d{2}-\d{2}\.csv$/);
   });
 });

@@ -1,5 +1,5 @@
 import {
-  ArrowLeftRight, BarChart3, Boxes, Building2, ClipboardList, CreditCard, FileText, HandCoins, Home, Landmark, LifeBuoy, Package, Receipt, Settings,
+  ArrowDownUp, ArrowLeftRight, BarChart3, Boxes, Building2, ClipboardList, CreditCard, FileText, HandCoins, Home, LifeBuoy, Package, Receipt, Settings,
   ShieldCheck, ShoppingBag, ShoppingCart, Store, Tags, Users, Wallet, Wrench, type LucideIcon,
 } from 'lucide-react';
 
@@ -29,7 +29,7 @@ export const NAV: { group: string; items: NavItem[] }[] = [
   {
     group: 'Financeiro',
     items: [
-      { href: '/app/financeiro', label: 'Visão geral', icon: Landmark, perm: 'finance.view' },
+      { href: '/app/financeiro', label: 'Fluxo de caixa', icon: ArrowDownUp, perm: 'finance.view' },
       { href: '/app/financeiro/receber', label: 'A receber', icon: HandCoins, perm: 'finance.view' },
       { href: '/app/financeiro/pagar', label: 'A pagar', icon: CreditCard, perm: 'finance.view' },
       { href: '/app/financeiro/despesas', label: 'Despesas', icon: Receipt, perm: 'finance.view' },

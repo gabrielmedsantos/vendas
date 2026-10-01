@@ -189,7 +189,12 @@ export async function getDashboard(deps: AppDeps, actor: Actor, q: z.infer<typeo
       const lastMovements = await trx
         .selectFrom('cash_movements as m')
         .innerJoin('financial_accounts as a', 'a.id', 'm.account_id')
-        .select(['m.id', 'm.occurred_on', 'm.direction', 'm.amount_cents', 'm.kind', 'm.description', 'a.name as account_name'])
+        .select(['m.id', 'm.occurred_on', 'm.direction', 'm.amount_cents', 'm.kind', 'a.name as account_name'])
+        // Recebimento/pagamento mostra o que foi pago (ex.: "Venda #12", "Aluguel"), não só "Recebimento".
+        .select(sql<string | null>`coalesce(
+          (select t.description from settlement_allocations sa join financial_titles t on t.id = sa.title_id
+            where m.origin_type in ('settlement', 'settlement_reversal') and sa.settlement_id = m.origin_id order by sa.amount_cents desc limit 1),
+          m.description)`.as('description'))
         .orderBy('m.created_at', 'desc')
         .limit(6)
         .execute();

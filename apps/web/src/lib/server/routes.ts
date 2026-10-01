@@ -373,6 +373,7 @@ export const routes: RouteDef[] = [
   { method: 'POST', path: 'finance/accounts', handler: async ({ deps, actor, body }) => A.createAccount(deps, actor, p(A.zAccount, await body())) },
   { method: 'POST', path: 'finance/accounts/:id/adjust-balance', handler: async ({ deps, actor, params, body, idempotencyKey }) => A.adjustAccountBalance(deps, actor, id(params), p(A.zAdjustBalance, await body()), idempotencyKey) },
   { method: 'POST', path: 'finance/accounts/unify', handler: async ({ deps, actor, body }) => A.unifyAccounts(deps, actor, p(A.zUnifyAccounts, await body())) },
+  { method: 'GET', path: 'finance/cash-flow', handler: ({ deps, actor, query }) => A.cashFlow(deps, actor, p(A.zCashFlow, queryObject(query))) },
   { method: 'GET', path: 'finance/cash-movements', handler: ({ deps, actor, query }) => A.listCashMovements(deps, actor, p(A.zStatement, queryObject(query))) },
   { method: 'POST', path: 'finance/cash-movements/:id/reverse', handler: async ({ deps, actor, params, body }) => A.reverseCashMovement(deps, actor, id(params), p(zReason, await body()).reason) },
   { method: 'POST', path: 'finance/cash-movements', handler: async ({ deps, actor, body, idempotencyKey }) => A.recordCashMovement(deps, actor, p(A.zCashMovement, await body()), idempotencyKey) },

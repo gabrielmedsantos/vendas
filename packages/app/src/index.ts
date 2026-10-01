@@ -22,3 +22,4 @@ export * from './platform';
 export * from './aftersales';
 export * from './growth';
 export * from './flyer';
+export * from './cashflow';

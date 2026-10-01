@@ -91,3 +91,10 @@ pnpm test && pnpm test:int
 - Campo "Pronúncia" (settings.flyer.pronunciation, uma regra "palavra = como falar" por linha, até 50) aplicado antes da síntese (`applyPronunciation`).
 - "Minha voz": gravar pelo microfone (MediaRecorder, até 60 s) ou enviar arquivo de áudio; processado só no navegador (mono 48 kHz, corta silêncio, nivela volume) e não é salvo no servidor. Permissions-Policy passou a `microphone=(self)`.
 - Pendência para decidir com o usuário: voz neural paga (Google/Azure/ElevenLabs) exige conta e chave; não configurada.
+
+## Início e Fluxo de caixa redesenhados
+- Referência funcional: capturas do VendaMax enviadas pelo usuário (dashboard e fluxo de caixa); visual segue o tema FlowPay (roxo, superfícies escuras), sem herdar o verde da referência.
+- `GET finance/cash-flow` (`packages/app/src/cashflow.ts`): movimentos do livro de caixa do período com origem (venda, compra, despesa, reembolso, troca, aportes, ajustes, transferências), cliente/fornecedor e link de origem; resumo (saldo inicial, entradas, saídas, saldo final, saldo hoje, a receber/a pagar com atrasados), por origem e série diária. Filtros de tipo/origem/busca afetam só a lista. Teste: `tests/integration/cashflow.test.ts`.
+- Menu "Visão geral" virou "Fluxo de caixa" (`/app/financeiro`): período navegável, cartões, gráfico de entradas/saídas (polaridade, cores validadas no fundo escuro) + saldo diário em gráfico próprio, "Para onde foi o dinheiro" (clicar filtra), previsto, lista com busca e filtros (cartões no celular), exportar CSV, e seção "Contas e conferência" (contas, abrir/fechar caixa, de onde vem o saldo, períodos).
+- Início: cartões em gradiente (contraste ≥ 4,5:1 com texto branco), meta do mês definida no próprio painel (falta por dia), receita e lucro com melhor dia, desempenho, participação por canal/pagamento, vendas recentes e agenda com atrasados.
+- Teste visual `tests/e2e/visual.spec.ts` gera fotos em test-results/ (computador e celular) e verifica que não há rolagem lateral no celular.
