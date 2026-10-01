@@ -246,6 +246,21 @@ export function NoPermission({ message }: { message?: string }) {
   );
 }
 
+const FIELD_LABEL: Record<string, string> = {
+  name: 'Nome', description: 'Descrição', amountCents: 'Valor', accountId: 'Conta', kind: 'Tipo', direction: 'Sentido', occurredOn: 'Data', date: 'Data',
+  email: 'E-mail', phone: 'Telefone', document: 'CPF/CNPJ', reason: 'Motivo', quantity: 'Quantidade', unitCostCents: 'Custo', retailPriceCents: 'Preço',
+  sku: 'SKU', categoryId: 'Categoria', supplierId: 'Fornecedor', customerId: 'Cliente', dueDate: 'Vencimento', competenceDate: 'Data', items: 'Itens',
+  variants: 'Variações', payments: 'Pagamentos', targetCents: 'Valor', title: 'Título', text: 'Texto', fromAccountId: 'Conta de origem', toAccountId: 'Conta de destino',
+};
+/** "variants.0.sku" → "SKU (variação 1)"; campos desconhecidos aparecem como vieram. */
+function fieldLabel(key: string): string {
+  const parts = key.split('.');
+  const last = [...parts].reverse().find((p) => !/^\d+$/.test(p)) ?? key;
+  const idx = parts.find((p) => /^\d+$/.test(p));
+  const label = FIELD_LABEL[last] ?? (last === '_' ? 'Geral' : last);
+  return idx !== undefined ? `${label} (item ${Number(idx) + 1})` : label;
+}
+
 export function FormError({ error }: { error: unknown }) {
   if (!error) return null;
   const e = error as ApiError;
@@ -256,7 +271,7 @@ export function FormError({ error }: { error: unknown }) {
         <ul className="mt-1 list-disc pl-5 text-xs">
           {Object.entries(e.fields).map(([k, v]) => (
             <li key={k}>
-              {k}: {v}
+              {fieldLabel(k)}: {v}
             </li>
           ))}
         </ul>

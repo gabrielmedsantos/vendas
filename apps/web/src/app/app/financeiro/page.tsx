@@ -314,7 +314,7 @@ export default function FinancePage() {
           <Field label="Conta" htmlFor="mv-acc"><Select id="mv-acc" value={f.accountId} onChange={(e) => setF({ ...f, accountId: e.target.value })}>{accounts.data?.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</Select></Field>
           <Field label="Valor" htmlFor="mv-v"><MoneyInput id="mv-v" value={f.amount ?? ''} onChange={(c) => setF({ ...f, amount: c })} /></Field>
           <Field label="Data" htmlFor="mv-d"><Input id="mv-d" type="date" value={f.date ?? ''} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field>
-          <Field label="Descrição" htmlFor="mv-desc" required><Input id="mv-desc" value={f.description ?? ''} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field>
+          <Field label="Descrição" htmlFor="mv-desc" help="Opcional. Ex.: dinheiro do sócio para comprar estoque"><Input id="mv-desc" value={f.description ?? ''} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field>
           <FormError error={error} />
         </div>
       </Modal>

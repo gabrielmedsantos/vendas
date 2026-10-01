@@ -12,11 +12,32 @@ export const zLocalDate = z.string().refine(isLocalDate, 'Data inválida (AAAA-M
 export const zQty = z.number().int().positive().max(1_000_000);
 export const zText = (max = 500) => z.string().trim().max(max);
 
+/** Mensagens padrão do validador em português (as mensagens próprias dos schemas são mantidas). */
+function ptMessage(issue: z.core.$ZodIssue): string {
+  const m = issue.message;
+  if (!/^(Invalid|Too (small|big)|Expected|Required|Unrecognized)/.test(m)) return m;
+  const i = issue as z.core.$ZodIssue & { input?: unknown; minimum?: number | bigint; maximum?: number | bigint; origin?: string };
+  switch (issue.code) {
+    case 'invalid_type': return i.input === undefined || i.input === null || /received (undefined|null)/.test(m) ? 'Campo obrigatório' : 'Valor inválido';
+    case 'too_small': return i.origin === 'string' ? (Number(i.minimum) <= 1 ? 'Campo obrigatório' : `Mínimo de ${i.minimum} caracteres`) : i.origin === 'array' ? 'Adicione ao menos um item' : `Valor mínimo: ${i.minimum}`;
+    case 'too_big': return i.origin === 'string' ? `Máximo de ${i.maximum} caracteres` : i.origin === 'array' ? `Máximo de ${i.maximum} itens` : `Valor máximo: ${i.maximum}`;
+    case 'invalid_format': return 'Formato inválido';
+    case 'invalid_union': {
+      // Ex.: valor aceito como texto ou número e nenhum dos dois veio.
+      const nested = (issue as { errors?: { message: string }[][] }).errors?.flat() ?? [];
+      return nested.length && nested.every((n) => /received (undefined|null)/.test(n.message)) ? 'Campo obrigatório' : 'Valor inválido';
+    }
+    case 'invalid_value': return 'Opção inválida';
+    case 'unrecognized_keys': return 'Campo não reconhecido';
+    default: return 'Valor inválido';
+  }
+}
+
 export function parse<T>(schema: z.ZodType<T>, data: unknown): T {
   const r = schema.safeParse(data);
   if (r.success) return r.data;
   const fields: Record<string, string> = {};
-  for (const issue of r.error.issues) fields[issue.path.join('.') || '_'] = issue.message;
+  for (const issue of r.error.issues) fields[issue.path.join('.') || '_'] = ptMessage(issue);
   throw new AppError('validation_failed', 'Verifique os campos informados.', fields);
 }
 

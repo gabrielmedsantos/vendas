@@ -773,8 +773,11 @@ export const zCashMovement = z.object({
   direction: z.enum(['in', 'out']).optional(),
   amountCents: zCentsPos,
   occurredOn: zLocalDate.optional(),
-  description: zText(300).min(3, 'Descreva o lançamento'),
+  /** Opcional: vazio usa o nome do tipo (ex.: "Aporte"). */
+  description: zText(300).optional().nullable(),
 });
+
+const MOVEMENT_LABEL: Record<string, string> = { opening: 'Saldo inicial', capital_in: 'Aporte', withdrawal: 'Retirada', loan_in: 'Empréstimo recebido', loan_out: 'Pagamento de empréstimo', cash_adjustment: 'Ajuste de caixa' };
 
 /**
  * Aportes, retiradas, empréstimos, saldo inicial e ajuste de caixa: tipos próprios,
@@ -799,7 +802,7 @@ export async function recordCashMovement(deps: AppDeps, actor: Actor, input: z.i
         .insertInto('cash_movements')
         .values({
           tenant_id: actor.tenantId, account_id: input.accountId, direction, amount_cents: input.amountCents, kind: input.kind,
-          origin_type: 'manual', origin_id: null, occurred_on: date, description: input.description, created_by: actor.userId,
+          origin_type: 'manual', origin_id: null, occurred_on: date, description: input.description?.trim() || MOVEMENT_LABEL[input.kind]!, created_by: actor.userId,
         })
         .returning('id')
         .executeTakeFirstOrThrow();

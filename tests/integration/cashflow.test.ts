@@ -61,6 +61,10 @@ describe('fluxo de caixa', () => {
     expect(dois.summary.openingCents).toBe(0n);
     expect(dois.series.map((s) => s.balanceCents)).toEqual([50000n, f.summary.closingCents]);
     await expect(cashFlow(deps, actor, zCashFlow.parse({ from: hoje, to: ontem }))).rejects.toMatchObject({ code: 'validation_failed' });
+    // Lançamento sem descrição usa o nome do tipo.
+    const sem = await recordCashMovement(deps, actor, zCashMovement.parse({ accountId: conta, kind: 'capital_in', amountCents: '500' }), randomUUID());
+    const lista = await cashFlow(deps, actor, zCashFlow.parse({ from: hoje, to: hoje, q: 'Aporte' }));
+    expect(lista.data.find((r) => r.id === (sem as { id: string }).id)).toMatchObject({ description: 'Aporte' });
     expect(await reconcile(deps, actor)).toEqual([]);
   });
 
