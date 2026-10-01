@@ -41,6 +41,7 @@ const BASE = (from: string, to: string, accountId?: string) => sql`
   select m.id, m.occurred_on, m.direction, m.amount_cents, m.kind, m.origin_type, m.description, m.account_id, a.name as account_name,
          m.created_at, m.reversal_of,
          exists (select 1 from cash_movements r where r.reversal_of = m.id) as reversed,
+         movement_of_deleted_sale(m.origin_type, m.origin_id) as hidden,
          t.origin_type as title_origin, t.origin_id as title_origin_id, t.description as title_description, p.name as party_name,
          case
            when m.kind in ('transfer_in', 'transfer_out') then 'transfer'
@@ -91,7 +92,7 @@ export async function cashFlow(deps: AppDeps, actor: Actor, q: z.infer<typeof zC
     const countTransfers = !!q.accountId;
     const totals = await sql<{ category: CashCategory; direction: 'in' | 'out'; cents: bigint; n: number }>`
       with base as (${BASE(from, to, q.accountId)})
-      select category, direction, sum(amount_cents)::bigint as cents, count(*)::int as n from base group by 1, 2`.execute(trx);
+      select category, direction, sum(amount_cents)::bigint as cents, count(*)::int as n from base where not hidden group by 1, 2`.execute(trx);
     let inCents = 0n;
     let outCents = 0n;
     const byCat = new Map<string, { category: CashCategory; label: string; inCents: bigint; outCents: bigint; count: number }>();
@@ -114,8 +115,8 @@ export async function cashFlow(deps: AppDeps, actor: Actor, q: z.infer<typeof zC
     const daily = await sql<{ day: string; in_cents: bigint; out_cents: bigint; net_cents: bigint }>`
       with base as (${BASE(from, to, q.accountId)})
       select to_char(d::date, 'YYYY-MM-DD') as day,
-             coalesce(sum(b.amount_cents) filter (where b.direction = 'in' and (${countTransfers} or b.category <> 'transfer')), 0)::bigint as in_cents,
-             coalesce(sum(b.amount_cents) filter (where b.direction = 'out' and (${countTransfers} or b.category <> 'transfer')), 0)::bigint as out_cents,
+             coalesce(sum(b.amount_cents) filter (where b.direction = 'in' and not b.hidden and (${countTransfers} or b.category <> 'transfer')), 0)::bigint as in_cents,
+             coalesce(sum(b.amount_cents) filter (where b.direction = 'out' and not b.hidden and (${countTransfers} or b.category <> 'transfer')), 0)::bigint as out_cents,
              coalesce(sum(case when b.direction = 'in' then b.amount_cents else -b.amount_cents end), 0)::bigint as net_cents
       from generate_series(${from}::date, ${to}::date, interval '1 day') d
       left join base b on b.occurred_on = d::date
@@ -130,7 +131,7 @@ export async function cashFlow(deps: AppDeps, actor: Actor, q: z.infer<typeof zC
     const list = await sql<Record<string, unknown> & { total: number }>`
       with base as (${BASE(from, to, q.accountId)})
       select b.*, count(*) over ()::int as total from base b
-      where true
+      where not b.hidden
         ${q.direction ? sql`and b.direction = ${q.direction}` : sql``}
         ${q.category ? sql`and b.category = ${q.category}` : sql``}
         ${term ? sql`and (coalesce(b.description, '') ilike ${'%' + term + '%'} or coalesce(b.title_description, '') ilike ${'%' + term + '%'}

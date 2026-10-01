@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { FileSignature, ReceiptText, RotateCcw, XCircle } from 'lucide-react';
+import { FileSignature, ReceiptText, RotateCcw, Trash2, XCircle } from 'lucide-react';
 import { formatBRL } from '@gct/shared';
 import { SaleWarranty } from '@/components/aftersales/warranty';
 import { DocLinks } from '@/components/docs/doc-links';
@@ -17,7 +17,7 @@ import { brl, dateBR, dateTimeBR, KIND_LABEL, STATUS_LABEL } from '@/lib/client/
 import { useCan } from '@/lib/client/session';
 
 interface Detail {
-  sale: { id: string; number: string | null; status: string; origin: string; saleDate: string; confirmedAt: string | null; customerName: string | null; customerId: string | null; channelName: string | null; subtotalCents: string; discountCents: string; shippingCents: string; totalCents: string; costTotalCents?: string; feesTotalCents?: string; channelCostCents?: string; returnedRevenueCents: string; notes: string | null; tradeId: string | null; discountApprovedBy: string | null };
+  sale: { id: string; number: string | null; status: string; origin: string; saleDate: string; confirmedAt: string | null; customerName: string | null; customerId: string | null; channelName: string | null; subtotalCents: string; discountCents: string; shippingCents: string; totalCents: string; costTotalCents?: string; feesTotalCents?: string; channelCostCents?: string; returnedRevenueCents: string; notes: string | null; tradeId: string | null; discountApprovedBy: string | null; deletedAt?: string | null; deletedReason?: string | null };
   items: { id: string; description: string; sku: string; quantity: number; unitPriceCents: string; totalCents: string; costCents?: string; returnedQty: number; internalCode: string | null; productKind: string }[];
   payments: { id: string; kind: string; methodName: string; amountCents: string; installments: number; feeCents?: string; settledNow: boolean }[];
   titles: { id: string; description: string; dueDate: string; originalCents: string; balanceCents: string; status: string }[];
@@ -44,6 +44,8 @@ export default function SaleDetail() {
   const [key, setKey] = useState(newKey);
   const [contractBusy, setContractBusy] = useState(false);
   const [receipt, setReceipt] = useState(false);
+  const [del, setDel] = useState<{ reason: string; busy: boolean; error: unknown; key: string } | null>(null);
+  const router = useRouter();
   const customerId = q.data?.sale.customerId;
   const customer = useQuery({ queryKey: ['party', customerId], queryFn: () => api<{ party: { phone: string | null } }>(`parties/${customerId}`), enabled: !!customerId && can('parties.view') });
   if (q.isLoading) return <LoadingBlock rows={6} />;
@@ -51,7 +53,8 @@ export default function SaleDetail() {
   const d = q.data!;
   const s = d.sale;
   const open = d.titles.reduce((a, t) => a + BigInt(t.balanceCents), 0n);
-  const canReturn = ['confirmed', 'partially_returned'].includes(s.status) && can('reversals.execute') && !s.tradeId;
+  const canReturn = ['confirmed', 'partially_returned'].includes(s.status) && can('reversals.execute') && !s.tradeId && !s.deletedAt;
+  const canDelete = s.status !== 'draft' && can('reversals.execute') && !s.tradeId && !s.deletedAt;
   const refundBody = () => (refund.mode === 'store_credit' ? { mode: 'store_credit' } : { mode: 'refund', payNow: refund.payNow ? { accountId: refund.accountId || accounts.data?.[0]?.id, method: refund.method } : null });
   const submit = async () => {
     setBusy(true); setError(null);
@@ -74,9 +77,16 @@ export default function SaleDetail() {
           {s.tradeId && <Link className="text-sm text-primary-soft" href={`/app/trocas/${s.tradeId}`}>Ver troca</Link>}
           {s.status !== 'draft' && <Button onClick={() => setReceipt(true)}><ReceiptText className="size-4" />Recibo</Button>}
           {canReturn && <Button variant="secondary" onClick={() => { setMode('return'); setQty({}); setReason(''); }}><RotateCcw className="size-4" />Devolução</Button>}
+          {canDelete && <Button variant="quiet" onClick={() => setDel({ reason: '', busy: false, error: null, key: newKey() })}><Trash2 className="size-4" />Excluir</Button>}
           {canReturn && s.status === 'confirmed' && <Button variant="danger" onClick={() => { setMode('cancel'); setReason(''); setRestock(true); setRefund((r) => ({ ...r, mode: 'refund', payNow: can('finance.settle_payable') })); }}><XCircle className="size-4" />Cancelar venda</Button>}
         </>}
       />
+      {s.deletedAt && (
+        <div role="status" className="mb-4 rounded-2xl border border-danger/30 bg-danger/10 p-4 text-sm">
+          <p className="font-medium text-danger-soft">Venda excluída em {dateTimeBR(s.deletedAt)}</p>
+          <p className="text-muted">Motivo: {s.deletedReason}. Ela não aparece nas listas, no Início, no fluxo de caixa nem nos relatórios. O valor foi devolvido e os itens voltaram ao estoque; este registro fica só para consulta.</p>
+        </div>
+      )}
       <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
         <div className="flex flex-col gap-4">
           <Card title="Itens">
@@ -162,6 +172,32 @@ export default function SaleDetail() {
         </div>
       </Modal>
       {receipt && <ReceiptModal saleId={s.id} open onClose={() => setReceipt(false)} />}
+      {del && (
+        <Modal open onClose={() => setDel(null)} title={`Excluir venda #${s.number ?? ''}`} footer={<>
+          <Button variant="secondary" onClick={() => setDel(null)}>Voltar</Button>
+          <Button variant="danger" loading={del.busy} disabled={del.reason.trim().length < 3} onClick={async () => {
+            setDel({ ...del, busy: true, error: null });
+            try {
+              await api(`sales/${id}/delete`, { body: { reason: del.reason.trim() }, idempotencyKey: del.key });
+              await qc.invalidateQueries();
+              toast('Venda excluída.');
+              router.push('/app/vendas');
+            } catch (e) { setDel({ ...del, busy: false, error: e }); }
+          }}><Trash2 className="size-4" />Excluir venda</Button>
+        </>}>
+          <div className="flex flex-col gap-3 text-sm">
+            <p>A venda some de Vendas, do Início, do fluxo de caixa e dos relatórios, como se não tivesse acontecido:</p>
+            <ul className="list-disc pl-5 text-muted">
+              <li>o valor recebido sai da conta em que entrou (o saldo volta ao que era);</li>
+              <li>os itens voltam para o estoque disponível;</li>
+              <li>contas a receber em aberto desta venda são canceladas.</li>
+            </ul>
+            <p className="text-xs text-muted">Por segurança, o registro não é apagado do banco: fica na aba “Excluídas” de Vendas, com o motivo, só para consulta.</p>
+            <Field label="Motivo" htmlFor="del-reason" required><Input id="del-reason" autoFocus maxLength={500} placeholder="Ex.: venda de teste, lançada em duplicidade" value={del.reason} onChange={(e) => setDel({ ...del, reason: e.target.value })} /></Field>
+            <FormError error={del.error} />
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

@@ -204,3 +204,48 @@ export async function cancelSale(deps: AppDeps, actor: Actor, saleId: string, in
   });
 }
 
+
+/**
+ * "Excluir venda" (venda de teste ou lançada por engano): cancela com estorno vinculado
+ * (valor devolvido na mesma conta em que entrou, itens de volta ao estoque) e marca a venda
+ * como excluída. Nada é apagado: some das listas, do Início e do fluxo de caixa, e fica
+ * consultável na aba Excluídas.
+ */
+export async function deleteSale(deps: AppDeps, actor: Actor, saleId: string, reason: string, idempotencyKey?: string) {
+  requirePermission(actor, 'reversals.execute');
+  requireWritable(actor);
+  if (reason.trim().length < 3) throw invalid('Informe o motivo da exclusão.', { reason: 'obrigatório' });
+  return tx(deps, actor, async (trx) => {
+    const { result } = await idempotent(trx, actor.tenantId, 'sale.delete', idempotencyKey, { saleId, reason }, async () => {
+      const sale = await trx.selectFrom('sales').select(['id', 'status', 'trade_id', 'deleted_at', 'number', 'sale_date']).where('id', '=', saleId).forUpdate().executeTakeFirst();
+      if (!sale) throw notFound('Venda');
+      // A venda sai também dos totais do mês dela: mês fechado não pode mudar.
+      await assertPeriodOpen(trx, sale.sale_date);
+      if (sale.deleted_at) throw conflict('Venda já excluída.');
+      if (sale.trade_id) throw conflict('Venda de troca: desfaça pela própria troca.');
+      if (sale.status === 'draft') throw conflict('Orçamento se exclui pela lista de orçamentos.');
+      if (['confirmed', 'partially_returned'].includes(sale.status)) {
+        // Devolve na conta e no meio em que o dinheiro entrou; sem recebimento, na primeira conta ativa.
+        const paid = await trx
+          .selectFrom('settlements as s')
+          .innerJoin('settlement_allocations as sa', 'sa.settlement_id', 's.id')
+          .innerJoin('financial_titles as t', 't.id', 'sa.title_id')
+          .innerJoin('financial_accounts as a', 'a.id', 's.account_id')
+          .select(['s.account_id', 's.method'])
+          .where('t.origin_type', '=', 'sale').where('t.origin_id', '=', saleId).where('s.direction', '=', 'in').where('a.status', '=', 'active')
+          .orderBy('s.created_at')
+          .executeTakeFirst();
+        const account = paid?.account_id ?? (await trx.selectFrom('financial_accounts').select('id').where('status', '=', 'active').orderBy('created_at').executeTakeFirst())?.id;
+        if (!account) throw conflict('Nenhuma conta ativa para devolver o valor.');
+        const method = (['cash', 'pix', 'debit', 'credit', 'bank_transfer', 'other'] as const).find((m) => m === paid?.method) ?? 'other';
+        const items = await trx.selectFrom('sale_items').select(['id', 'quantity', 'returned_qty']).where('sale_id', '=', saleId).execute();
+        const pending = items.filter((i) => i.quantity > i.returned_qty).map((i) => ({ saleItemId: i.id, quantity: i.quantity - i.returned_qty }));
+        await returnInTx(trx, actor, saleId, { items: pending, reason: `Venda excluída: ${reason.trim()}`, refund: { mode: 'refund', payNow: { accountId: account, method } } }, { kind: 'cancellation', restock: true });
+      }
+      await trx.updateTable('sales').set({ deleted_at: new Date(), deleted_by: actor.userId, deleted_reason: reason.trim() }).where('id', '=', saleId).execute();
+      await audit(trx, actor, 'sale.deleted', 'sale', saleId, { reason: reason.trim(), number: sale.number?.toString() ?? null });
+      return { id: saleId };
+    });
+    return result;
+  });
+}

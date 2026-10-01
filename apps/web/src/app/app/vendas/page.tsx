@@ -11,7 +11,7 @@ import { api, qs } from '@/lib/client/api';
 import { brl, dateBR, STATUS_LABEL } from '@/lib/client/format';
 import { useCan } from '@/lib/client/session';
 
-interface Row { id: string; number: string | null; status: string; origin: string; saleDate: string; validUntil: string | null; totalCents: string; returnedRevenueCents: string; customerName: string | null; channelName: string | null; paymentMethods: string | null; itemsQty: number; costTotalCents?: string; returnedCostCents?: string; tradeId: string | null; wasCanceled?: boolean }
+interface Row { id: string; number: string | null; status: string; origin: string; saleDate: string; validUntil: string | null; totalCents: string; returnedRevenueCents: string; customerName: string | null; channelName: string | null; paymentMethods: string | null; itemsQty: number; costTotalCents?: string; returnedCostCents?: string; tradeId: string | null; wasCanceled?: boolean; deletedAt?: string | null }
 
 export default function SalesPage() {
   const can = useCan();
@@ -29,7 +29,7 @@ export default function SalesPage() {
       <PageHeader title="Vendas" description="Registre, acompanhe e analise as vendas." actions={can('sales.create') && <LinkButton href="/app/vendas/nova"><Plus className="size-4" />Nova venda</LinkButton>} />
       <Card>
         <div className="flex flex-col gap-3">
-          <Tabs value={status} onChange={(v) => { setStatus(v); reset(); }} options={[{ value: 'all_confirmed', label: 'Confirmadas' }, { value: 'draft', label: 'Orçamentos' }, { value: 'returned', label: 'Canceladas e devoluções' }]} />
+          <Tabs value={status} onChange={(v) => { setStatus(v); reset(); }} options={[{ value: 'all_confirmed', label: 'Confirmadas' }, { value: 'draft', label: 'Orçamentos' }, { value: 'returned', label: 'Canceladas e devoluções' }, { value: 'deleted', label: 'Excluídas' }]} />
           <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
             <div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" /><Input value={term} onChange={(e) => { setTerm(e.target.value); reset(); }} placeholder="Buscar por nº, cliente ou produto" className="pl-9" aria-label="Buscar vendas" /></div>
             <Input type="date" aria-label="De" value={from} onChange={(e) => { setFrom(e.target.value); reset(); }} />
@@ -50,11 +50,11 @@ export default function SalesPage() {
                     <Td>{dateBR(s.saleDate)}</Td><Td>{s.customerName ?? <span className="text-muted">Consumidor</span>}</Td><Td className="text-muted">{s.channelName ?? '—'}</Td>
                     <Td className="text-xs text-muted">{s.paymentMethods ?? '—'}</Td><Td right>{s.itemsQty}</Td><Td right>{brl(s.totalCents)}</Td>
                     {s.costTotalCents !== undefined && <Td right>{brl((BigInt(s.totalCents) - BigInt(s.returnedRevenueCents) - (BigInt(s.costTotalCents) - BigInt(s.returnedCostCents ?? '0'))).toString())}</Td>}
-                    <Td><span className="flex gap-1">{s.origin === 'trade' && <Badge tone="primary">Troca</Badge>}{s.wasCanceled ? <Badge tone="danger">Cancelada</Badge> : <Badge tone={s.status === 'confirmed' ? 'success' : s.status === 'draft' ? 'neutral' : 'warning'}>{STATUS_LABEL[s.status]}</Badge>}</span></Td>
+                    <Td><span className="flex gap-1">{s.origin === 'trade' && <Badge tone="primary">Troca</Badge>}{s.deletedAt ? <Badge tone="neutral">Excluída</Badge> : s.wasCanceled ? <Badge tone="danger">Cancelada</Badge> : <Badge tone={s.status === 'confirmed' ? 'success' : s.status === 'draft' ? 'neutral' : 'warning'}>{STATUS_LABEL[s.status]}</Badge>}</span></Td>
                   </tr>
                 ))}</tbody>
               </Table>
-              {status === 'all_confirmed' && can('reversals.execute') && <p className="mt-3 text-xs text-muted">Lançou uma venda por engano? Abra a venda e use <strong>Cancelar venda</strong>: o valor é estornado, os itens voltam ao estoque e ela passa para “Canceladas e devoluções”. O registro original fica guardado (não é apagado).</p>}
+              {status === 'all_confirmed' && can('reversals.execute') && <p className="mt-3 text-xs text-muted">Lançou uma venda por engano? Abra a venda e use <strong>Excluir</strong>: ela some das listas e dos totais, o valor volta para a conta e os itens voltam ao estoque.</p>}
               <Pager hasMore={list.data.meta.hasMore} cursor={list.data.meta.cursor} onNext={setCursor} onFirst={reset} isFirst={!cursor} total={list.data.meta.total} />
             </>
           )}

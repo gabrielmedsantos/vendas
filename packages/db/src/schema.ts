@@ -843,6 +843,9 @@ export interface Sales {
   cost_total_cents: Generated<bigint>;
   created_at: Generated<Timestamp>;
   created_by: string | null;
+  deleted_at: Timestamp | null;
+  deleted_by: string | null;
+  deleted_reason: string | null;
   customer_id: string | null;
   discount_approved_by: string | null;
   discount_cents: Generated<bigint>;

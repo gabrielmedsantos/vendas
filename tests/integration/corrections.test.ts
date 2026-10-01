@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '@gct/db';
 import {
-  balanceBreakdown, cancelExpense, cancelPurchase, cancelSale, confirmSale, listSales, zSaleList, createExpense, deleteProduct, getProduct, listAccounts, listCashMovements, quickPurchase, recordCashMovement, reverseCashMovement,
+  balanceBreakdown, cancelExpense, cancelPurchase, cancelSale, cashFlow, confirmSale, deleteSale, getMetrics, listSales, zCashFlow, zSaleList, createExpense, deleteProduct, getProduct, listAccounts, listCashMovements, quickPurchase, recordCashMovement, reverseCashMovement,
   zCashMovement, zExpense, zPurchase, zSale, zStatement, type Actor,
 } from '@gct/app';
 import { closeDeps, createTenant, makeParty, makeProduct, reconcile, testDeps, todayIn, type TenantFixture } from './helpers';
@@ -109,6 +109,40 @@ describe('corrigir lançamentos sem apagar histórico', () => {
     // Registro original preservado; resultado do período volta a zero para essa venda.
     const sale = await withTenant(deps.dbs.app, actor, (trx) => trx.selectFrom('sales').select(['status', 'total_cents']).where('id', '=', r.saleId).executeTakeFirstOrThrow());
     expect(sale).toEqual({ status: 'returned', total_cents: 13000n });
+    expect(await reconcile(deps, actor)).toEqual([]);
+  });
+
+  it('excluir venda de teste: some das vendas, do Início e do fluxo de caixa; dinheiro e estoque voltam; registro fica em Excluídas', async () => {
+    const p = await makeProduct(deps, actor, { name: 'Excluir Teste', priceCents: 9000n });
+    await quickPurchase(deps, actor, zPurchase.parse({ supplierId: sup, purchaseDate: todayIn(actor), items: [{ variantId: p.variantId, quantity: 1, unitCostCents: '4000' }], paymentTerms: { mode: 'pay_now', accountId: conta, method: 'pix' } }), randomUUID());
+    const before = await saldo();
+    const m0 = await getMetrics(deps, actor, {});
+    const f0 = await cashFlow(deps, actor, zCashFlow.parse({ from: todayIn(actor), to: todayIn(actor) }));
+    const r = await confirmSale(deps, actor, zSale.parse({ items: [{ variantId: p.variantId, quantity: 1, unitPriceCents: '9000' }], payments: [{ kind: 'pix', amountCents: '9000' }] }), randomUUID());
+    expect(await saldo()).toBe(before + 9000n);
+    await expect(deleteSale(deps, actor, r.saleId, 'x')).rejects.toMatchObject({ code: 'validation_failed' });
+    const key = randomUUID();
+    await deleteSale(deps, actor, r.saleId, 'Venda de teste', key);
+    await deleteSale(deps, actor, r.saleId, 'Venda de teste', key); // repetir não duplica
+    await expect(deleteSale(deps, actor, r.saleId, 'de novo', randomUUID())).rejects.toMatchObject({ code: 'conflict' });
+    expect(await saldo()).toBe(before);
+    expect(await onHand(p.productId)).toBe(1);
+    for (const status of ['all_confirmed', 'returned'] as const) {
+      expect((await listSales(deps, actor, zSaleList.parse({ status }))).data.some((x) => x.id === r.saleId)).toBe(false);
+    }
+    expect((await listSales(deps, actor, zSaleList.parse({ status: 'deleted' }))).data.find((x) => x.id === r.saleId)).toMatchObject({ deleted_reason: 'Venda de teste' });
+    // Início e fluxo de caixa ficam como antes da venda (receita, quantidade, entradas e saídas).
+    const m1 = await getMetrics(deps, actor, {});
+    expect(m1.salesCount).toBe(m0.salesCount);
+    expect(m1.revenue).toEqual(m0.revenue);
+    const f1 = await cashFlow(deps, actor, zCashFlow.parse({ from: todayIn(actor), to: todayIn(actor) }));
+    expect(f1.summary.inCents).toBe(f0.summary.inCents);
+    expect(f1.summary.outCents).toBe(f0.summary.outCents);
+    expect(f1.data.some((x) => x.title_origin_id === r.saleId)).toBe(false);
+    // Nada foi apagado: venda e movimentos continuam no banco, e tudo concilia.
+    const rows = await withTenant(deps.dbs.app, actor, (trx) => trx.selectFrom('sales').select(['status', 'deleted_at']).where('id', '=', r.saleId).executeTakeFirstOrThrow());
+    expect(rows.status).toBe('returned');
+    expect(rows.deleted_at).not.toBeNull();
     expect(await reconcile(deps, actor)).toEqual([]);
   });
 });

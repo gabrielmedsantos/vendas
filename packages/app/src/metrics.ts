@@ -48,19 +48,19 @@ export async function periodFacts(trx: Tx, from: string, to: string): Promise<Pe
   }>`
     with tz as (select timezone from tenants where id = app_tenant_id())
     select
-      (select coalesce(sum(total_cents), 0) from sales where status not in ('draft', 'canceled') and sale_date between ${from}::date and ${to}::date) as revenue,
-      (select coalesce(sum(cost_total_cents), 0) from sales where status not in ('draft', 'canceled') and sale_date between ${from}::date and ${to}::date) as cogs,
-      (select coalesce(sum(channel_cost_cents), 0) from sales where status not in ('draft', 'canceled') and sale_date between ${from}::date and ${to}::date) as channel,
-      (select count(*) from sales where status not in ('draft', 'canceled') and sale_date between ${from}::date and ${to}::date)::int as sales,
+      (select coalesce(sum(total_cents), 0) from sales where status not in ('draft', 'canceled') and deleted_at is null and sale_date between ${from}::date and ${to}::date) as revenue,
+      (select coalesce(sum(cost_total_cents), 0) from sales where status not in ('draft', 'canceled') and deleted_at is null and sale_date between ${from}::date and ${to}::date) as cogs,
+      (select coalesce(sum(channel_cost_cents), 0) from sales where status not in ('draft', 'canceled') and deleted_at is null and sale_date between ${from}::date and ${to}::date) as channel,
+      (select count(*) from sales where status not in ('draft', 'canceled') and deleted_at is null and sale_date between ${from}::date and ${to}::date)::int as sales,
       (select coalesce(sum(si.quantity), 0) from sale_items si join sales s on s.id = si.sale_id
-         where s.status not in ('draft', 'canceled') and s.sale_date between ${from}::date and ${to}::date and si.product_kind = 'physical')::int as units,
-      (select coalesce(sum(revenue_cents), 0) from returns r where (r.created_at at time zone (select timezone from tz))::date between ${from}::date and ${to}::date) as ret_rev,
-      (select coalesce(sum(cost_cents), 0) from returns r where (r.created_at at time zone (select timezone from tz))::date between ${from}::date and ${to}::date) as ret_cogs,
-      (select coalesce(sum(case when reversal_of is null then fee_cents else -fee_cents end), 0) from settlements where direction = 'in' and settled_on between ${from}::date and ${to}::date) as fees,
+         where s.status not in ('draft', 'canceled') and s.deleted_at is null and s.sale_date between ${from}::date and ${to}::date and si.product_kind = 'physical')::int as units,
+      (select coalesce(sum(revenue_cents), 0) from returns r where (r.created_at at time zone (select timezone from tz))::date between ${from}::date and ${to}::date and not exists (select 1 from sales sd where sd.id = r.sale_id and sd.deleted_at is not null)) as ret_rev,
+      (select coalesce(sum(cost_cents), 0) from returns r where (r.created_at at time zone (select timezone from tz))::date between ${from}::date and ${to}::date and not exists (select 1 from sales sd where sd.id = r.sale_id and sd.deleted_at is not null)) as ret_cogs,
+      (select coalesce(sum(case when reversal_of is null then fee_cents else -fee_cents end), 0) from settlements where direction = 'in' and not movement_of_deleted_sale('settlement', id) and settled_on between ${from}::date and ${to}::date) as fees,
       (select coalesce(sum(amount_cents), 0) from expenses where status = 'active' and competence_date between ${from}::date and ${to}::date) as expenses,
       (select coalesce(sum(to_cogs_cents), 0) from acquisition_costs where occurred_on between ${from}::date and ${to}::date) as extra_cogs,
-      (select coalesce(sum(amount_cents), 0) from cash_movements where direction = 'in' and kind not in ('transfer_in', 'opening') and origin_type <> 'balance_adjustment' and occurred_on between ${from}::date and ${to}::date) as cash_in,
-      (select coalesce(sum(amount_cents), 0) from cash_movements where direction = 'out' and kind not in ('transfer_out') and origin_type <> 'balance_adjustment' and occurred_on between ${from}::date and ${to}::date) as cash_out
+      (select coalesce(sum(amount_cents), 0) from cash_movements where direction = 'in' and kind not in ('transfer_in', 'opening') and origin_type <> 'balance_adjustment' and not movement_of_deleted_sale(origin_type, origin_id) and occurred_on between ${from}::date and ${to}::date) as cash_in,
+      (select coalesce(sum(amount_cents), 0) from cash_movements where direction = 'out' and kind not in ('transfer_out') and origin_type <> 'balance_adjustment' and not movement_of_deleted_sale(origin_type, origin_id) and occurred_on between ${from}::date and ${to}::date) as cash_out
   `.execute(trx);
   const f = r.rows[0]!;
   return {
@@ -142,23 +142,24 @@ export async function getDashboard(deps: AppDeps, actor: Actor, q: z.infer<typeo
              coalesce(sum(s.cost_total_cents), 0) as cost,
              count(s.id)::int as count
       from generate_series(${period.from}::date, ${period.to}::date, interval '1 day') d
-      left join sales s on s.sale_date = d::date and s.status not in ('draft', 'canceled')
+      left join sales s on s.sale_date = d::date and s.status not in ('draft', 'canceled') and s.deleted_at is null
       group by d order by d`.execute(trx);
     const byChannel = await sql<{ name: string; revenue: bigint; count: number }>`
       select coalesce(ch.name, 'Sem canal') as name, sum(s.total_cents) as revenue, count(*)::int as count
       from sales s left join sales_channels ch on ch.id = s.channel_id
-      where s.status not in ('draft', 'canceled') and s.sale_date between ${period.from}::date and ${period.to}::date
+      where s.status not in ('draft', 'canceled') and s.deleted_at is null and s.sale_date between ${period.from}::date and ${period.to}::date
       group by 1 order by 2 desc`.execute(trx);
     const byPayment = await sql<{ name: string; amount: bigint }>`
       select sp.method_name as name, sum(sp.amount_cents) as amount
       from sale_payments sp join sales s on s.id = sp.sale_id
-      where s.status not in ('draft', 'canceled') and s.sale_date between ${period.from}::date and ${period.to}::date
+      where s.status not in ('draft', 'canceled') and s.deleted_at is null and s.sale_date between ${period.from}::date and ${period.to}::date
       group by 1 order by 2 desc`.execute(trx);
     const recent = await trx
       .selectFrom('sales as s')
       .leftJoin('parties as c', 'c.id', 's.customer_id')
       .select(['s.id', 's.number', 's.sale_date', 's.total_cents', 's.status', 's.origin', 'c.name as customer_name'])
       .where('s.status', 'not in', ['draft', 'canceled'])
+      .where('s.deleted_at', 'is', null)
       .orderBy('s.confirmed_at', 'desc')
       .limit(6)
       .execute();
@@ -195,6 +196,7 @@ export async function getDashboard(deps: AppDeps, actor: Actor, q: z.infer<typeo
           (select t.description from settlement_allocations sa join financial_titles t on t.id = sa.title_id
             where m.origin_type in ('settlement', 'settlement_reversal') and sa.settlement_id = m.origin_id order by sa.amount_cents desc limit 1),
           m.description)`.as('description'))
+        .where(sql<boolean>`not movement_of_deleted_sale(m.origin_type, m.origin_id)`)
         .orderBy('m.created_at', 'desc')
         .limit(6)
         .execute();
@@ -262,7 +264,7 @@ export async function buildReport(trx: Tx, actor: Actor, kind: ReportKind, perio
                (select coalesce(sum(quantity),0) from sale_items si where si.sale_id = s.id)::int as qty,
                s.total_cents, s.returned_revenue_cents ${showCost ? sql`, s.cost_total_cents, s.total_cents - s.cost_total_cents as gross_cents` : sql``}
         from sales s left join parties c on c.id = s.customer_id left join sales_channels ch on ch.id = s.channel_id
-        where s.status not in ('draft', 'canceled') and s.sale_date between ${from}::date and ${to}::date
+        where s.status not in ('draft', 'canceled') and s.deleted_at is null and s.sale_date between ${from}::date and ${to}::date
         order by s.sale_date, s.number`.execute(trx);
       const cols: ReportData['columns'] = [
         { key: 'sale_date', label: 'Data', type: 'date' }, { key: 'number', label: 'Nº', type: 'int' }, { key: 'customer', label: 'Cliente', type: 'text' },
@@ -278,7 +280,7 @@ export async function buildReport(trx: Tx, actor: Actor, kind: ReportKind, perio
         select si.description, si.sku, sum(si.quantity - si.returned_qty)::int as qty, sum(si.total_cents - si.returned_revenue_cents) as revenue_cents
                ${showCost ? sql`, sum(si.cost_cents - si.returned_cost_cents) as cost_cents, sum(si.total_cents - si.returned_revenue_cents) - sum(si.cost_cents - si.returned_cost_cents) as gross_cents` : sql``}
         from sale_items si join sales s on s.id = si.sale_id
-        where s.status not in ('draft', 'canceled') and s.sale_date between ${from}::date and ${to}::date
+        where s.status not in ('draft', 'canceled') and s.deleted_at is null and s.sale_date between ${from}::date and ${to}::date
         group by si.description, si.sku order by revenue_cents desc limit 100`.execute(trx);
       const cols: ReportData['columns'] = [{ key: 'description', label: 'Produto', type: 'text' }, { key: 'sku', label: 'SKU', type: 'text' }, { key: 'qty', label: 'Qtd líquida', type: 'int' }, { key: 'revenue_cents', label: 'Receita líquida', type: 'money' }];
       if (showCost) cols.push({ key: 'cost_cents', label: 'CMV', type: 'money' }, { key: 'gross_cents', label: 'Resultado bruto', type: 'money' });
@@ -290,7 +292,7 @@ export async function buildReport(trx: Tx, actor: Actor, kind: ReportKind, perio
                ${showCost ? sql`, sum(si.total_cents - si.returned_revenue_cents) - sum(si.cost_cents - si.returned_cost_cents) as gross_cents` : sql``}
         from sale_items si join sales s on s.id = si.sale_id join product_variants v on v.id = si.variant_id join products p on p.id = v.product_id
         left join categories c on c.id = p.category_id
-        where s.status not in ('draft', 'canceled') and s.sale_date between ${from}::date and ${to}::date
+        where s.status not in ('draft', 'canceled') and s.deleted_at is null and s.sale_date between ${from}::date and ${to}::date
         group by 1 order by revenue_cents desc`.execute(trx);
       const cols: ReportData['columns'] = [{ key: 'category', label: 'Categoria', type: 'text' }, { key: 'qty', label: 'Qtd', type: 'int' }, { key: 'revenue_cents', label: 'Receita líquida', type: 'money' }];
       if (showCost) cols.push({ key: 'gross_cents', label: 'Resultado bruto', type: 'money' });
@@ -300,14 +302,14 @@ export async function buildReport(trx: Tx, actor: Actor, kind: ReportKind, perio
       const r = await sql<Record<string, unknown>>`
         select coalesce(ch.name, 'Sem canal') as channel, count(*)::int as count, sum(s.total_cents) as revenue_cents, sum(s.channel_cost_cents) as channel_cost_cents
         from sales s left join sales_channels ch on ch.id = s.channel_id
-        where s.status not in ('draft', 'canceled') and s.sale_date between ${from}::date and ${to}::date group by 1 order by 3 desc`.execute(trx);
+        where s.status not in ('draft', 'canceled') and s.deleted_at is null and s.sale_date between ${from}::date and ${to}::date group by 1 order by 3 desc`.execute(trx);
       return { kind, title: 'Vendas por canal', period, columns: [{ key: 'channel', label: 'Canal', type: 'text' }, { key: 'count', label: 'Vendas', type: 'int' }, { key: 'revenue_cents', label: 'Receita', type: 'money' }, { key: 'channel_cost_cents', label: 'Comissão', type: 'money' }], rows: r.rows };
     }
     case 'payments': {
       const r = await sql<Record<string, unknown>>`
         select sp.method_name as method, count(*)::int as count, sum(sp.amount_cents) as amount_cents, sum(sp.fee_cents) as expected_fee_cents
         from sale_payments sp join sales s on s.id = sp.sale_id
-        where s.status not in ('draft', 'canceled') and s.sale_date between ${from}::date and ${to}::date group by 1 order by 3 desc`.execute(trx);
+        where s.status not in ('draft', 'canceled') and s.deleted_at is null and s.sale_date between ${from}::date and ${to}::date group by 1 order by 3 desc`.execute(trx);
       return { kind, title: 'Vendas por forma de pagamento', period, columns: [{ key: 'method', label: 'Forma', type: 'text' }, { key: 'count', label: 'Lançamentos', type: 'int' }, { key: 'amount_cents', label: 'Valor', type: 'money' }, { key: 'expected_fee_cents', label: 'Taxa prevista', type: 'money' }], rows: r.rows };
     }
     case 'purchases': {
@@ -357,7 +359,7 @@ export async function buildReport(trx: Tx, actor: Actor, kind: ReportKind, perio
                case when m.direction = 'in' then m.amount_cents else 0 end as in_cents,
                case when m.direction = 'out' then m.amount_cents else 0 end as out_cents
         from cash_movements m join financial_accounts a on a.id = m.account_id
-        where m.occurred_on between ${from}::date and ${to}::date order by m.occurred_on, m.created_at`.execute(trx);
+        where m.occurred_on between ${from}::date and ${to}::date and not movement_of_deleted_sale(m.origin_type, m.origin_id) order by m.occurred_on, m.created_at`.execute(trx);
       const f = await periodFacts(trx, from, to);
       return { kind, title: 'Fluxo de caixa realizado', period, columns: [{ key: 'occurred_on', label: 'Data', type: 'date' }, { key: 'account', label: 'Conta', type: 'text' }, { key: 'kind', label: 'Tipo', type: 'text' }, { key: 'description', label: 'Descrição', type: 'text' }, { key: 'in_cents', label: 'Entrada', type: 'money' }, { key: 'out_cents', label: 'Saída', type: 'money' }], rows: r.rows, totals: { in_cents: f.cashInCents, out_cents: f.cashOutCents } };
     }

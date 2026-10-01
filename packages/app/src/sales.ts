@@ -393,7 +393,7 @@ export async function cancelDraft(deps: AppDeps, actor: Actor, saleId: string) {
 // Consultas
 
 export const zSaleList = zPageQuery.extend({
-  status: z.enum(['draft', 'confirmed', 'returned', 'all_confirmed', 'all']).default('all_confirmed'),
+  status: z.enum(['draft', 'confirmed', 'returned', 'all_confirmed', 'deleted', 'all']).default('all_confirmed'),
   from: zLocalDate.optional(),
   to: zLocalDate.optional(),
   q: z.string().max(100).optional(),
@@ -417,8 +417,11 @@ export async function listSales(deps: AppDeps, actor: Actor, q: z.infer<typeof z
         sql<string>`(select string_agg(distinct sp.method_name, ', ') from sale_payments sp where sp.sale_id = s.id)`.as('payment_methods'),
         sql<number>`(select coalesce(sum(quantity),0) from sale_items si where si.sale_id = s.id)::int`.as('items_qty'),
         sql<boolean>`exists(select 1 from returns r where r.sale_id = s.id and r.kind = 'cancellation')`.as('was_canceled'),
+        's.deleted_at', 's.deleted_reason',
         sql<number>`count(*) over ()::int`.as('total'),
       ]);
+    // Excluídas só aparecem na aba própria (auditoria); nas demais, nunca.
+    query = q.status === 'deleted' ? query.where('s.deleted_at', 'is not', null) : query.where('s.deleted_at', 'is', null);
     if (q.status === 'draft') query = query.where('s.status', '=', 'draft');
     else if (q.status === 'confirmed') query = query.where('s.status', '=', 'confirmed');
     else if (q.status === 'returned') query = query.where('s.status', 'in', ['partially_returned', 'returned', 'reversed']);

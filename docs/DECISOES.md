@@ -77,3 +77,6 @@ Uma `Dockerfile` com alvos `web` (Next standalone) e `worker` (bundle esbuild; `
 
 ## ADR-020 — Ordem das alocações de custo
 UUID aleatório não serve para ordenar. `sale_cost_allocations.seq` (identity) define a ordem; devolução reverte da última alocação para a primeira. Encontrado por teste intermitente (T-014).
+
+## ADR — "Excluir venda" sem apagar histórico
+O usuário precisa que venda de teste/lançada por engano suma do sistema. Apagar fisicamente quebraria caixa e estoque e contraria a regra de histórico imutável. Decisão: `deleteSale` cancela com estorno vinculado (reembolso na conta/meio do recebimento, itens direto ao estoque) e marca `sales.deleted_at` (migração 0014, só colunas). Vendas excluídas e seus estornos saem das listas, do Início, dos relatórios e do fluxo de caixa (função `movement_of_deleted_sale`, migração 0015), de forma retroativa no mês da venda; por isso a exclusão é bloqueada em período fechado. O registro segue consultável na aba "Excluídas".
