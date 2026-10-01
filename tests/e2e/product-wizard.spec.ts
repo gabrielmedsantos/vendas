@@ -60,5 +60,24 @@ test('novo produto em etapas com estoque, custo e fornecedor', async ({ browser 
   expect(compras.data).toHaveLength(1);
   const fluxo = await (await r.get('/api/v1/finance/cash-flow')).json();
   expect(fluxo.summary.outCents).toBe('30000');
+
+  // Reposição pela lista de produtos: botão Entrada, fornecedor já cadastrado, pago agora.
+  await page.goto('/app/produtos');
+  await page.getByRole('button', { name: 'Entrada de estoque: Poltrona Inflável com Pufe' }).click();
+  const modal = page.getByRole('dialog');
+  await modal.getByLabel('Quantidade').fill('5');
+  await money(page, 'Custo por unidade', '32');
+  await expect(modal.getByText('Total R$ 160,00')).toBeVisible();
+  await modal.getByLabel('Fornecedor', { exact: true }).selectOption({ label: 'Distribuidora Nova Fortaleza' });
+  await page.screenshot({ path: '../test-results/entrada-estoque.png' });
+  await modal.getByRole('button', { name: /Dar entrada/ }).click();
+  await expect(page.getByText('Entrada de 5 unidade(s) registrada.')).toBeVisible();
+  const depois = await (await r.get(`/api/v1/products/${id}`)).json();
+  expect(depois.variants[0].onHand).toBe(15);
+  expect((await (await r.get('/api/v1/purchases')).json()).data).toHaveLength(2);
+  // Menu: Compras logo abaixo de Produtos.
+  const nav = await page.getByRole('navigation', { name: 'Principal' }).getByRole('link').allInnerTexts();
+  const iProd = nav.findIndex((t) => t.trim() === 'Produtos');
+  expect(nav[iProd + 1]?.trim()).toBe('Compras');
   await ctx.close();
 });

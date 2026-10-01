@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { Archive, History, Megaphone, ShoppingBag, ShoppingCart, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { Archive, History, Megaphone, ShoppingCart, SlidersHorizontal, Trash2, PackagePlus } from 'lucide-react';
 import { AdjustModal } from '@/components/products/adjust-modal';
+import { StockEntryModal } from '@/components/products/stock-entry-modal';
 import { ListingModal } from '@/components/products/listing-modal';
 import { ProductPhotos } from '@/components/products/photos';
 import { ProductForm, toApi, type ProductFormValue } from '@/components/products/product-form';
@@ -29,6 +30,7 @@ export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
   const [tab, setTab] = useState<'overview' | 'history' | 'edit'>('overview');
   const [adjust, setAdjust] = useState(false);
+  const [entry, setEntry] = useState(false);
   const [listing, setListing] = useState(false);
   const can = useCan();
   const qc = useQueryClient();
@@ -53,7 +55,7 @@ export default function ProductPage() {
           <Badge tone={p.status === 'active' ? 'success' : 'neutral'}>{STATUS_LABEL[p.status]}</Badge>
           {can('sales.create') && p.status === 'active' && <LinkButton href={`/app/vendas/nova?variante=${p.variants[0]?.id}`}><ShoppingCart className="size-4" />Vender</LinkButton>}
           {p.status === 'active' && <Button variant="secondary" onClick={() => setListing(true)}><Megaphone className="size-4" />Anunciar</Button>}
-          {can('purchases.manage') && p.kind === 'physical' && <LinkButton variant="secondary" href={`/app/compras/nova?variante=${p.variants[0]?.id}`}><ShoppingBag className="size-4" />Entrada por compra</LinkButton>}
+          {(can('purchases.manage') || can('inventory.adjust')) && p.kind === 'physical' && p.status !== 'archived' && <Button variant="secondary" onClick={() => setEntry(true)}><PackagePlus className="size-4" />Entrada de estoque</Button>}
           {can('inventory.adjust') && p.kind === 'physical' && <Button variant="secondary" onClick={() => setAdjust(true)}><SlidersHorizontal className="size-4" />Ajustar</Button>}
           {can('products.manage') && (
             <Button variant="quiet" onClick={async () => {
@@ -125,6 +127,7 @@ export default function ProductPage() {
           setTab('overview');
         }} />
       )}
+      {entry && <StockEntryModal productId={p.id} onClose={() => setEntry(false)} />}
       {adjust && <AdjustModal open={adjust} onClose={() => setAdjust(false)} variants={p.variants} tracking={p.tracking} />}
       {listing && <ListingModal open={listing} onClose={() => setListing(false)} product={p} />}
       <p className="mt-6 text-xs text-muted"><Link href="/app/produtos" className="hover:text-fg">← Voltar para produtos</Link></p>

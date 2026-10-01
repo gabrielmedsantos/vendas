@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, describe, expect, it } from 'vitest';
 import { withTenant } from '@gct/db';
-import { cashFlow, createProductWithStock, getProduct, listAccounts, listPurchases, zCashFlow, zProductWithStock, zPurchaseList } from '@gct/app';
+import { cashFlow, createProductWithStock, getProduct, listAccounts, listPurchases, stockEntry, zCashFlow, zProductWithStock, zPurchaseList, zStockEntry } from '@gct/app';
 import { closeDeps, createTenant, reconcile, testDeps, todayIn, withPerms } from './helpers';
 
 const deps = testDeps();
@@ -77,5 +77,28 @@ describe('cadastro de produto com estoque inicial', () => {
       product: product('Fone', 'F-1'),
       stock: { entries: [{ variantIndex: 0, quantity: 1, unitCostCents: '100' }], source: { mode: 'opening' } },
     }), randomUUID())).rejects.toMatchObject({ code: 'forbidden' });
+  });
+
+  it('entrada de estoque (reposição): compra paga soma ao estoque com custo novo; a pagar vira conta; não aceita variação de outro produto', async () => {
+    const T = await createTenant(deps, 'Loja Reposição');
+    const actor = T.owner;
+    const conta = (await listAccounts(deps, actor))[0]!.id;
+    const a = await createProductWithStock(deps, actor, zProductWithStock.parse({ product: product('Fone', 'FON-1'), stock: { entries: [{ variantIndex: 0, quantity: 2, unitCostCents: '1000' }], source: { mode: 'opening' } } }), randomUUID());
+    const b = await createProductWithStock(deps, actor, zProductWithStock.parse({ product: product('Cabo', 'CAB-1') }), randomUUID());
+    const va = (await getProduct(deps, actor, a.id)).variants[0] as unknown as { id: string };
+    const vb = (await getProduct(deps, actor, b.id)).variants[0] as unknown as { id: string };
+    const key = randomUUID();
+    const input = zStockEntry.parse({ entries: [{ variantId: va.id, quantity: 3, unitCostCents: '1500' }], source: { mode: 'purchase', supplierName: 'Fornecedor Reposição', paymentTerms: { mode: 'pay_now', accountId: conta, method: 'pix' } } });
+    const r = await stockEntry(deps, actor, a.id, input, key);
+    await stockEntry(deps, actor, a.id, input, key); // repetir não duplica
+    expect(r.purchaseId).toBeTruthy();
+    expect((await getProduct(deps, actor, a.id)).variants[0]).toMatchObject({ on_hand: 5 });
+    const lots = await withTenant(deps.dbs.app, actor, (trx) => trx.selectFrom('inventory_lots').select(['qty_remaining', 'cost_remaining_cents']).where('variant_id', '=', va.id).orderBy('created_at').execute());
+    expect(lots).toEqual([{ qty_remaining: 2, cost_remaining_cents: 2000n }, { qty_remaining: 3, cost_remaining_cents: 4500n }]);
+    await stockEntry(deps, actor, a.id, zStockEntry.parse({ entries: [{ variantId: va.id, quantity: 1, unitCostCents: '1500' }], source: { mode: 'purchase', supplierName: 'Fornecedor Reposição', paymentTerms: { mode: 'due', dueDate: todayIn(actor) } } }), randomUUID());
+    const open = await withTenant(deps.dbs.app, actor, (trx) => trx.selectFrom('financial_titles').select(['balance_cents']).where('direction', '=', 'payable').where('status', '=', 'open').execute());
+    expect(open).toEqual([{ balance_cents: 1500n }]);
+    await expect(stockEntry(deps, actor, a.id, zStockEntry.parse({ entries: [{ variantId: vb.id, quantity: 1, unitCostCents: '100' }], source: { mode: 'opening' } }), randomUUID())).rejects.toMatchObject({ code: 'validation_failed' });
+    expect(await reconcile(deps, actor)).toEqual([]);
   });
 });

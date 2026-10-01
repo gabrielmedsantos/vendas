@@ -4,12 +4,13 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
-import { ImageOff, Package, Plus, Search } from 'lucide-react';
+import { ImageOff, Package, Plus, Search, PackagePlus } from 'lucide-react';
 import { useDebounced } from '@/components/ops/hooks';
 import { useCategories } from '@/components/ops/hooks';
-import { Badge, Card, EmptyState, ErrorState, Input, LinkButton, LoadingBlock, PageHeader, Pager, Select, Stat, Table, Td, Th, cx } from '@/components/ui';
+import { Badge, Button, Card, EmptyState, ErrorState, Input, LinkButton, LoadingBlock, PageHeader, Pager, Select, Stat, Table, Td, Th, cx } from '@/components/ui';
 import { api, qs } from '@/lib/client/api';
 import { brl, pct, STATUS_LABEL } from '@/lib/client/format';
+import { StockEntryModal } from '@/components/products/stock-entry-modal';
 import { useCan } from '@/lib/client/session';
 
 interface Row {
@@ -29,6 +30,7 @@ const FILTERS = [
 function Products() {
   const params = useSearchParams();
   const can = useCan();
+  const [entry, setEntry] = useState<string | null>(null);
   const [term, setTerm] = useState('');
   const [filter, setFilter] = useState(params.get('filter') ?? '');
   const [status, setStatus] = useState('active');
@@ -97,7 +99,7 @@ function Products() {
           {list.data && list.data.data.length > 0 && (
             <>
               <Table>
-                <thead><tr><Th>Produto</Th><Th>Categoria</Th>{showCost && <Th right>Custo médio</Th>}<Th right>Varejo / atacado</Th>{showCost && <Th right>Margem</Th>}<Th right>Estoque</Th><Th>Situação</Th></tr></thead>
+                <thead><tr><Th>Produto</Th><Th>Categoria</Th>{showCost && <Th right>Custo médio</Th>}<Th right>Varejo / atacado</Th>{showCost && <Th right>Margem</Th>}<Th right>Estoque</Th><Th>Situação</Th><Th /></tr></thead>
                 <tbody>
                   {list.data.data.map((r) => (
                     <tr key={r.id} className="hover:bg-surface-2">
@@ -124,6 +126,9 @@ function Products() {
                         {r.inspection > 0 && <div className="text-xs text-info">{r.inspection} em inspeção</div>}
                       </Td>
                       <Td><Badge tone={r.status === 'active' ? 'success' : 'neutral'}>{STATUS_LABEL[r.status]}</Badge></Td>
+                      <Td right>{r.kind === 'physical' && r.status !== 'archived' && (can('purchases.manage') || can('inventory.adjust')) && (
+                        <Button size="sm" variant="secondary" onClick={() => setEntry(r.id)} aria-label={`Entrada de estoque: ${r.name}`}><PackagePlus className="size-3.5" />Entrada</Button>
+                      )}</Td>
                     </tr>
                   ))}
                 </tbody>
@@ -133,6 +138,7 @@ function Products() {
           )}
         </div>
       </Card>
+      {entry && <StockEntryModal productId={entry} onClose={() => setEntry(null)} />}
     </div>
   );
 }
