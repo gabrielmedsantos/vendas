@@ -344,6 +344,7 @@ export const routes: RouteDef[] = [
   },
   { method: 'POST', path: 'sales/drafts/:id/cancel', handler: ({ deps, actor, params }) => A.cancelDraft(deps, actor, id(params)) },
   { method: 'GET', path: 'sales/:id', handler: ({ deps, actor, params }) => A.getSale(deps, actor, id(params)) },
+  { method: 'GET', path: 'sales/:id/receipt-data', handler: ({ deps, actor, params }) => A.saleReceiptData(deps, actor, id(params)) },
   { method: 'POST', path: 'sales/:id/returns', handler: async ({ deps, actor, params, body, idempotencyKey }) => A.returnSale(deps, actor, id(params), p(A.zReturn, await body()), idempotencyKey) },
   {
     method: 'POST', path: 'sales/:id/cancel',

@@ -294,3 +294,27 @@ export async function readSharedDocument(deps: AppDeps, token: string): Promise<
   if (!doc || doc.status !== 'ready' || !doc.storage_key) throw notFound('Documento');
   return { filename: `${DOC_LABEL[doc.doc_type as DocType] ?? 'documento'} ${doc.number}.pdf`, data: await deps.storage.get(doc.storage_key) };
 }
+
+/**
+ * Dados para o recibo editável da tela da venda: mesmo conteúdo do recibo oficial
+ * (sem custo/margem), com o endereço do cliente e a identidade visual da loja (logo e cor).
+ * Os ajustes feitos na tela (dados do cliente, observação) ficam só no recibo gerado.
+ */
+export async function saleReceiptData(deps: AppDeps, actor: Actor, saleId: string) {
+  requirePermission(actor, 'sales.view');
+  return tx(deps, actor, async (trx) => {
+    const s = await trx.selectFrom('sales').select(['id', 'status', 'customer_id', 'confirmed_at']).where('id', '=', saleId).executeTakeFirst();
+    if (!s) throw notFound('Venda');
+    if (s.status === 'draft') throw conflict('Orçamento não tem recibo; confirme a venda primeiro.');
+    const snap = await buildSnapshot(trx, 'sale_receipt', saleId);
+    const t = await trx.selectFrom('tenants').select(['settings']).executeTakeFirstOrThrow();
+    const settings = t.settings as { brandLogoId?: string; brandColors?: { primary?: string } | null };
+    return {
+      ...snap,
+      customer: await partySnapshot(trx, s.customer_id, true),
+      confirmedAt: s.confirmed_at,
+      status: s.status,
+      brand: { logoId: settings.brandLogoId ?? null, color: settings.brandColors?.primary ?? null },
+    };
+  });
+}

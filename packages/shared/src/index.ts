@@ -9,3 +9,4 @@ export * from './flyer';
 export * from './cutout';
 export * from './flyer-video';
 export * from './narration';
+export * from './words';

@@ -4,10 +4,11 @@ import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
-import { FileSignature, RotateCcw, XCircle } from 'lucide-react';
+import { FileSignature, ReceiptText, RotateCcw, XCircle } from 'lucide-react';
 import { formatBRL } from '@gct/shared';
 import { SaleWarranty } from '@/components/aftersales/warranty';
 import { DocLinks } from '@/components/docs/doc-links';
+import { ReceiptModal } from '@/components/docs/receipt-modal';
 import { useAccounts } from '@/components/ops/hooks';
 import { Badge, Button, Card, ErrorState, Field, FormError, Input, LoadingBlock, Modal, PageHeader, Select, Table, Td, Th } from '@/components/ui';
 import { useToast } from '@/components/toast';
@@ -42,6 +43,7 @@ export default function SaleDetail() {
   const [busy, setBusy] = useState(false);
   const [key, setKey] = useState(newKey);
   const [contractBusy, setContractBusy] = useState(false);
+  const [receipt, setReceipt] = useState(false);
   const customerId = q.data?.sale.customerId;
   const customer = useQuery({ queryKey: ['party', customerId], queryFn: () => api<{ party: { phone: string | null } }>(`parties/${customerId}`), enabled: !!customerId && can('parties.view') });
   if (q.isLoading) return <LoadingBlock rows={6} />;
@@ -70,6 +72,7 @@ export default function SaleDetail() {
           {s.origin === 'trade' && <Badge tone="primary">Troca</Badge>}
           <Badge tone={s.status === 'confirmed' ? 'success' : 'warning'}>{STATUS_LABEL[s.status]}</Badge>
           {s.tradeId && <Link className="text-sm text-primary-soft" href={`/app/trocas/${s.tradeId}`}>Ver troca</Link>}
+          {s.status !== 'draft' && <Button onClick={() => setReceipt(true)}><ReceiptText className="size-4" />Recibo</Button>}
           {canReturn && <Button variant="secondary" onClick={() => { setMode('return'); setQty({}); setReason(''); }}><RotateCcw className="size-4" />Devolução</Button>}
           {canReturn && s.status === 'confirmed' && <Button variant="danger" onClick={() => { setMode('cancel'); setReason(''); setRestock(true); setRefund((r) => ({ ...r, mode: 'refund', payNow: can('finance.settle_payable') })); }}><XCircle className="size-4" />Cancelar venda</Button>}
         </>}
@@ -158,6 +161,7 @@ export default function SaleDetail() {
           <FormError error={error} />
         </div>
       </Modal>
+      {receipt && <ReceiptModal saleId={s.id} open onClose={() => setReceipt(false)} />}
     </div>
   );
 }
