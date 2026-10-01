@@ -273,16 +273,20 @@ export async function quickPurchase(deps: AppDeps, actor: Actor, input: Purchase
   requirePermission(actor, 'purchases.manage');
   requireWritable(actor);
   return tx(deps, actor, async (trx) => {
-    const { result } = await idempotent(trx, actor.tenantId, 'purchase.quick', idempotencyKey, input, async () => {
-      const { id } = await writeDraft(trx, actor, input);
-      const approved = await approveInTx(trx, actor, id);
-      const items = await trx.selectFrom('purchase_items').select(['id', 'quantity']).where('purchase_id', '=', id).execute();
-      const rec = await receiveInTx(trx, actor, id, { items: items.map((i) => ({ purchaseItemId: i.id, quantity: i.quantity, destination: input.destination ?? 'available' })) });
-      await requestDocument(trx, actor, 'purchase_term', 'purchase', id);
-      return { id, number: approved.number, ...rec };
-    });
+    const { result } = await idempotent(trx, actor.tenantId, 'purchase.quick', idempotencyKey, input, () => quickPurchaseInTx(trx, actor, input));
     return result;
   });
+}
+
+/** Compra já recebida (rascunho → aprovada → recebida) dentro de uma transação aberta. */
+export async function quickPurchaseInTx(trx: Tx, actor: Actor, input: PurchaseInput & { destination?: 'available' | 'inspection' }) {
+  requirePermission(actor, 'purchases.manage');
+  const { id } = await writeDraft(trx, actor, input);
+  const approved = await approveInTx(trx, actor, id);
+  const items = await trx.selectFrom('purchase_items').select(['id', 'quantity']).where('purchase_id', '=', id).execute();
+  const rec = await receiveInTx(trx, actor, id, { items: items.map((i) => ({ purchaseItemId: i.id, quantity: i.quantity, destination: input.destination ?? 'available' })) });
+  await requestDocument(trx, actor, 'purchase_term', 'purchase', id);
+  return { id, number: approved.number, ...rec };
 }
 
 /** Cancelamento sem recebimento: rascunho sem efeitos; aprovada cancela saldo e gera reembolso do que foi pago. */

@@ -115,3 +115,23 @@ export function formatBps(bps: number | null): string {
   const frac = abs % 100;
   return `${neg ? '-' : ''}${int},${frac.toString().padStart(2, '0')}%`;
 }
+
+/**
+ * Preço de venda para uma margem sobre o preço (custo 30, margem 50% → preço 60).
+ * Arredonda para cima ao centavo, para a margem real nunca ficar abaixo da pedida.
+ */
+export function priceForMarginBps(costCents: bigint, marginBps: number): bigint | null {
+  const m = BigInt(Math.trunc(marginBps));
+  if (m < 0n || m >= 10000n || costCents < 0n) return null;
+  const num = costCents * 10000n;
+  const den = 10000n - m;
+  return (num + den - 1n) / den;
+}
+
+/** Margem sobre o preço em basis points ((preço − custo) / preço), arredondada para baixo; null sem preço. */
+export function marginBpsOf(priceCents: bigint, costCents: bigint): number | null {
+  if (priceCents <= 0n) return null;
+  const d = (priceCents - costCents) * 10000n;
+  const q = d / priceCents;
+  return Number(d % priceCents !== 0n && d < 0n ? q - 1n : q);
+}

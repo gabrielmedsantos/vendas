@@ -23,3 +23,4 @@ export * from './aftersales';
 export * from './growth';
 export * from './flyer';
 export * from './cashflow';
+export * from './product-quick';

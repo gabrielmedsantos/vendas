@@ -221,6 +221,7 @@ export const routes: RouteDef[] = [
   },
   { method: 'GET', path: 'products', handler: ({ deps, actor, query }) => A.listProducts(deps, actor, p(A.zProductList, queryObject(query))) },
   { method: 'POST', path: 'products', handler: async ({ deps, actor, body }) => A.createProduct(deps, actor, p(A.zProduct, await body())) },
+  { method: 'POST', path: 'products/with-stock', handler: async ({ deps, actor, body, idempotencyKey }) => A.createProductWithStock(deps, actor, p(A.zProductWithStock, await body()), idempotencyKey) },
   {
     method: 'GET', path: 'products/search',
     handler: ({ deps, actor, query }) => A.searchSellable(deps, actor, (query.get('q') ?? '').slice(0, 80), { includeInactive: query.get('inactive') === '1' }),

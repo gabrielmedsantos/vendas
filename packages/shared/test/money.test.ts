@@ -95,3 +95,17 @@ describe('permissions', () => {
     expect(effectivePermissions('owner', [], ['costs.view']).has('costs.view')).toBe(true);
   });
 });
+
+describe('preço pela margem', () => {
+  it('custo 30, margem 50% → 60; margem estimada volta 50%', async () => {
+    const { priceForMarginBps, marginBpsOf } = await import('../src');
+    expect(priceForMarginBps(3000n, 5000)).toBe(6000n);
+    expect(marginBpsOf(6000n, 3000n)).toBe(5000);
+    // Arredonda para cima: custo 10, margem 33,33% → 15,00 (14,9993…)
+    expect(priceForMarginBps(1000n, 3333)).toBe(1500n);
+    expect(marginBpsOf(1500n, 1000n)).toBeGreaterThanOrEqual(3333);
+    expect(priceForMarginBps(1000n, 10000)).toBeNull();
+    expect(marginBpsOf(0n, 100n)).toBeNull();
+    expect(marginBpsOf(1000n, 1500n)).toBe(-5000);
+  });
+});

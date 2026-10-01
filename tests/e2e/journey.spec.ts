@@ -54,12 +54,15 @@ test.describe.serial('jornada completa', () => {
       { name: 'Celular Demo', sku: `CEL-${run}`, price: '4000', serial: true },
       { name: 'Capa Demo', sku: `CAPA-${run}`, price: '50', serial: false },
     ]) {
+      // Cadastro em etapas, sem estoque inicial (a mercadoria entra depois, pela compra).
       await page.goto('/app/produtos/novo');
-      if (p.serial) await page.getByLabel('Controle de estoque').selectOption('serialized');
-      await page.getByRole('textbox', { name: 'Nome', exact: true }).fill(p.name);
-      await page.getByRole('textbox', { name: 'SKU', exact: true }).fill(p.sku);
-      await money(page, 'Preço de varejo', p.price);
-      await page.getByRole('button', { name: 'Cadastrar' }).click();
+      await page.getByLabel('Nome do produto').fill(p.name);
+      await page.getByRole('tab', { name: /Preço/ }).click();
+      await money(page, 'Preço de venda (varejo)', p.price);
+      await page.getByRole('tab', { name: /Estoque/ }).first().click();
+      if (p.serial) await page.getByLabel('Controle do estoque').selectOption('serialized');
+      await page.getByLabel('SKU (código interno)').fill(p.sku);
+      await page.getByRole('button', { name: /^Cadastrar/ }).click();
       await expect(page.getByRole('heading', { name: p.name })).toBeVisible();
     }
   });

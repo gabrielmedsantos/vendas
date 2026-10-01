@@ -397,26 +397,7 @@ export async function adjustStock(deps: AppDeps, actor: Actor, input: z.infer<ty
     if (!v) throw notFound('Produto');
     if (v.kind === 'service') throw invalid('Serviço não movimenta estoque.');
     const loc = await defaultLocation(trx);
-    if (input.direction === 'in') {
-      if (input.kind === 'loss') throw invalid('Perda é sempre saída.');
-      if (input.unitCostCents === undefined) throw invalid('Informe o custo unitário da entrada.', { unitCostCents: 'obrigatório' });
-      if (v.tracking === 'serialized') {
-        if (input.quantity !== 1) throw invalid('Unidade serializada: ajuste uma unidade por vez.');
-        const unitId = await upsertUnitForEntry(trx, actor, v.id, loc, input.unit ?? {});
-        const r = await stockIn(trx, actor, {
-          variantId: v.id, locationId: loc, quantity: 1, costCents: input.unitCostCents, bucket: 'available',
-          lotSource: input.kind === 'opening' ? 'opening' : 'adjustment', kind: 'adjustment_in', sourceType: 'adjustment', unitId, reason: input.reason,
-        });
-        await audit(trx, actor, 'inventory.adjusted_in', 'variant', v.id, { qty: 1, unitId, reason: input.reason });
-        return { lotId: r.lotId, unitId };
-      }
-      const r = await stockIn(trx, actor, {
-        variantId: v.id, locationId: loc, quantity: input.quantity, costCents: input.unitCostCents * BigInt(input.quantity), bucket: 'available',
-        lotSource: input.kind === 'opening' ? 'opening' : 'adjustment', kind: 'adjustment_in', sourceType: 'adjustment', reason: input.reason,
-      });
-      await audit(trx, actor, 'inventory.adjusted_in', 'variant', v.id, { qty: input.quantity, reason: input.reason });
-      return { lotId: r.lotId };
-    }
+    if (input.direction === 'in') return stockEntryInTx(trx, actor, input, v, loc);
     const kind: MovementKind = input.kind === 'loss' ? 'loss' : 'adjustment_out';
     const out =
       v.tracking === 'serialized'
@@ -444,6 +425,35 @@ export async function adjustStock(deps: AppDeps, actor: Actor, input: z.infer<ty
     await audit(trx, actor, 'inventory.adjusted_out', 'variant', v.id, { qty: input.quantity, kind, cost: out.costCents, reason: input.reason });
     return { costCents: out.costCents };
   });
+}
+
+
+/** Entrada de estoque com custo informado (ajuste ou saldo inicial), dentro de uma transação aberta. */
+export async function stockEntryInTx(
+  trx: Tx,
+  actor: Actor,
+  input: z.infer<typeof zAdjustment>,
+  v: { id: string; tracking: string },
+  loc: string,
+) {
+  if (input.kind === 'loss') throw invalid('Perda é sempre saída.');
+  if (input.unitCostCents === undefined) throw invalid('Informe o custo unitário da entrada.', { unitCostCents: 'obrigatório' });
+  if (v.tracking === 'serialized') {
+    if (input.quantity !== 1) throw invalid('Unidade serializada: ajuste uma unidade por vez.');
+    const unitId = await upsertUnitForEntry(trx, actor, v.id, loc, input.unit ?? {});
+    const r = await stockIn(trx, actor, {
+      variantId: v.id, locationId: loc, quantity: 1, costCents: input.unitCostCents, bucket: 'available',
+      lotSource: input.kind === 'opening' ? 'opening' : 'adjustment', kind: 'adjustment_in', sourceType: 'adjustment', unitId, reason: input.reason,
+    });
+    await audit(trx, actor, 'inventory.adjusted_in', 'variant', v.id, { qty: 1, unitId, reason: input.reason });
+    return { lotId: r.lotId, unitId };
+  }
+  const r = await stockIn(trx, actor, {
+    variantId: v.id, locationId: loc, quantity: input.quantity, costCents: input.unitCostCents * BigInt(input.quantity), bucket: 'available',
+    lotSource: input.kind === 'opening' ? 'opening' : 'adjustment', kind: 'adjustment_in', sourceType: 'adjustment', reason: input.reason,
+  });
+  await audit(trx, actor, 'inventory.adjusted_in', 'variant', v.id, { qty: input.quantity, reason: input.reason });
+  return { lotId: r.lotId };
 }
 
 // ---------------------------------------------------------------------------

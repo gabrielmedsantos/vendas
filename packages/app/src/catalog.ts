@@ -121,32 +121,37 @@ export async function createProduct(deps: AppDeps, actor: Actor, input: z.infer<
   requirePermission(actor, 'products.manage');
   requireWritable(actor);
   checkProductShape(input);
-  return tx(deps, actor, async (trx) => {
-    await checkLimit(trx, actor.tenantId, 'products', 1);
-    if (input.categoryId) await assertCategory(trx, input.categoryId);
-    const product = await trx
-      .insertInto('products')
-      .values({
-        tenant_id: actor.tenantId,
-        kind: input.kind,
-        tracking: input.tracking,
-        name: input.name,
-        description: input.description ?? null,
-        brand: input.brand ?? null,
-        category_id: input.categoryId ?? null,
-        status: input.status,
-        condition_default: input.conditionDefault ?? null,
-        warranty_days: input.warrantyDays,
-        identifier_kinds: input.identifierKinds,
-        search_text: searchText(input, input.variants),
-        created_by: actor.userId,
-      })
-      .returning('id')
-      .executeTakeFirstOrThrow();
-    await insertVariants(trx, actor, product.id, input.variants);
-    await audit(trx, actor, 'product.created', 'product', product.id, { name: input.name });
-    return { id: product.id };
-  });
+  return tx(deps, actor, (trx) => createProductInTx(trx, actor, input));
+}
+
+/** Cria o produto dentro de uma transação já aberta (usado também no cadastro com estoque inicial). */
+export async function createProductInTx(trx: Tx, actor: Actor, input: z.infer<typeof zProduct>) {
+  requirePermission(actor, 'products.manage');
+  checkProductShape(input);
+  await checkLimit(trx, actor.tenantId, 'products', 1);
+  if (input.categoryId) await assertCategory(trx, input.categoryId);
+  const product = await trx
+    .insertInto('products')
+    .values({
+      tenant_id: actor.tenantId,
+      kind: input.kind,
+      tracking: input.tracking,
+      name: input.name,
+      description: input.description ?? null,
+      brand: input.brand ?? null,
+      category_id: input.categoryId ?? null,
+      status: input.status,
+      condition_default: input.conditionDefault ?? null,
+      warranty_days: input.warrantyDays,
+      identifier_kinds: input.identifierKinds,
+      search_text: searchText(input, input.variants),
+      created_by: actor.userId,
+    })
+    .returning('id')
+    .executeTakeFirstOrThrow();
+  await insertVariants(trx, actor, product.id, input.variants);
+  await audit(trx, actor, 'product.created', 'product', product.id, { name: input.name });
+  return { id: product.id };
 }
 
 async function assertCategory(trx: Tx, id: string) {
