@@ -2,7 +2,7 @@ import { createHmac, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  applyBillingEvent, createProduct, getReferralInfo, platformReferrals, platformSetReferralStatus, provisionTenant, platformCreateInvoice, platformMarkInvoicePaid, platformOverview, platformSetTenantStatus, processWebhookEvents,
+  applyBillingEvent, createProduct, grantCourtesy, runSubscriptionLifecycle, getReferralInfo, platformReferrals, platformSetReferralStatus, provisionTenant, platformCreateInvoice, platformMarkInvoicePaid, platformOverview, platformSetTenantStatus, processWebhookEvents,
   receiveBillingWebhook, resolveActor, resolvePlatformAdmin, verifyWebhookSignature, zProduct, type PlatformAdmin,
 } from '@gct/app';
 import { closeDeps, createTenant, createUser, testDeps, type TenantFixture } from './helpers';
@@ -128,5 +128,32 @@ describe('indicações na plataforma', () => {
     await expect(platformSetReferralStatus(deps, admin, (await find()).id, 'rejected', 'x x x')).rejects.toMatchObject({ code: 'conflict' });
     const log = await deps.dbs.platform.selectFrom('platform_audit').select('action').where('tenant_id', '=', referrer.tenantId).execute();
     expect(log.map((l) => l.action)).toContain('referral.rewarded');
+  });
+
+  it('cortesia: empresa com teste vencido e bloqueada volta a funcionar e não expira mais', async () => {
+    const E = await createTenant(deps, 'Empresa do Dono');
+    const sId = (await sub(E.tenantId)).id;
+    // Teste vencido há 40 dias → rotina de cobrança bloqueia.
+    const past = new Date(Date.now() - 40 * 86400000);
+    await deps.dbs.platform.updateTable('subscriptions').set({ trial_ends_at: past, current_period_end: past }).where('id', '=', sId).execute();
+    await runSubscriptionLifecycle(deps.dbs.platform);
+    await runSubscriptionLifecycle(deps.dbs.platform);
+    expect((await sub(E.tenantId)).status).toBe('suspended');
+    const input = zProduct.parse({ name: 'Bloqueado', variants: [{ sku: `COR-${randomUUID().slice(0, 6)}`, retailPriceCents: '100' }] });
+    await expect(createProduct(deps, await resolveActor(deps, E.ownerUser.id, E.tenantId), input)).rejects.toMatchObject({ code: 'tenant_suspended' });
+
+    await grantCourtesy(deps.dbs.platform, E.tenantId, 'empresa do dono da plataforma', 'cli:cortesia');
+    const s = await sub(E.tenantId);
+    expect(s.status).toBe('active');
+    expect(s.trial_ends_at).toBeNull();
+    expect(s.current_period_end.getUTCFullYear()).toBe(2100);
+    await expect(createProduct(deps, await resolveActor(deps, E.ownerUser.id, E.tenantId), input)).resolves.toBeTruthy();
+    // A rotina de cobrança não volta a bloquear, nem daqui a 10 anos.
+    await runSubscriptionLifecycle(deps.dbs.platform, new Date(Date.now() + 3650 * 86400000));
+    expect((await sub(E.tenantId)).status).toBe('active');
+    const events = await deps.dbs.platform.selectFrom('subscription_events').select(['to_status', 'reason', 'actor']).where('subscription_id', '=', sId).orderBy('created_at').execute();
+    expect(events.at(-1)).toMatchObject({ to_status: 'active', actor: 'cli:cortesia', reason: 'Cortesia: empresa do dono da plataforma' });
+    // Repetir não quebra (já ativa).
+    await expect(grantCourtesy(deps.dbs.platform, E.tenantId, 'de novo', 'cli:cortesia')).resolves.toMatchObject({ changed: true });
   });
 });

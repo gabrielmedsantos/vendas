@@ -23,6 +23,7 @@ await build({
     worker: 'src/index.ts',
     migrate: '../../packages/db/scripts/migrate.ts',
     'platform-admin': '../../packages/db/scripts/platform-admin.ts',
+    cortesia: 'src/cortesia.ts',
     'seed-demo': '../web/scripts/seed-demo.ts',
   },
   outdir: 'dist',

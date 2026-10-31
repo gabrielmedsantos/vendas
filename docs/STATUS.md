@@ -105,3 +105,4 @@ pnpm test && pnpm test:int
 - Recibo na tela da venda (botão "Recibo"): `GET sales/:id/receipt-data` (sem custo/margem); dados do cliente e observações editáveis só no recibo; prévia ao vivo; A4 ou bobina 80 mm; imprimir, baixar PDF e compartilhar; valor por extenso (`moneyInWords`, testado); aviso "não substitui documento fiscal". Teste: `tests/e2e/receipt.spec.ts`.
 - Entrada de estoque (reposição) pela lista e pela página do produto: `POST products/:id/stock-entry` (`stockEntry` em product-quick.ts, mesma regra do cadastro: compra paga/a pagar ou saldo inicial). Menu: Compras logo abaixo de Produtos.
 - Excluir venda: `POST sales/:id/delete` (reversals.execute) — ver ADR em DECISOES.md. Migrações 0014 e 0015 (aditivas).
+- Cortesia permanente para a empresa do dono: `sudo /srv/gct/infra/vps/cortesia.sh "Nome" --aplicar` (worker `dist/cortesia.js`, `grantCourtesy` em billing.ts; auditado em subscription_events).

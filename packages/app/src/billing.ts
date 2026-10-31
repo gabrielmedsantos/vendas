@@ -197,3 +197,26 @@ export async function runSubscriptionLifecycle(platform: Db, now = new Date()): 
   }
   return { transitions };
 }
+
+/**
+ * Cortesia permanente (ex.: a empresa do próprio dono da plataforma): assinatura ativa,
+ * sem fim de teste e sem vencimento próximo; a rotina de cobrança deixa de mexer nela.
+ * Auditado em subscription_events. Não apaga nem altera dados da empresa.
+ */
+export async function grantCourtesy(platform: Db, tenantId: string, reason: string, actorId: string): Promise<{ changed: boolean }> {
+  if (reason.trim().length < 3) throw invalid('Informe o motivo.');
+  const sub = await platform.selectFrom('subscriptions').select(['id']).where('tenant_id', '=', tenantId).executeTakeFirst();
+  if (!sub) throw notFound('Assinatura');
+  await platform
+    .updateTable('subscriptions')
+    .set({ trial_ends_at: null, current_period_end: new Date('2100-01-01T00:00:00Z'), cancel_at_period_end: false })
+    .where('id', '=', sub.id)
+    .execute();
+  const r = await transitionSubscription(platform, tenantId, 'active', `Cortesia: ${reason.trim()}`, actorId);
+  // Já estava ativa: registra a cortesia mesmo assim e garante a empresa liberada.
+  if (!r.changed) {
+    await platform.insertInto('subscription_events').values({ tenant_id: tenantId, subscription_id: sub.id, from_status: 'active', to_status: 'active', reason: `Cortesia: ${reason.trim()}`, actor: actorId, idempotency_key: null }).execute();
+    await platform.updateTable('tenants').set({ status: 'active', status_reason: `Cortesia: ${reason.trim()}` }).where('id', '=', tenantId).execute();
+  }
+  return { changed: true };
+}
