@@ -18,6 +18,7 @@ x-app: &app
     options: { max-size: "10m", max-file: "5" }
   environment: &app-env
     NODE_ENV: production
+    APP_VERSION: ${APP_VERSION:-local}
     STORAGE_PATH: /data/storage
     DATABASE_URL: postgres://gct_app:${GCT_APP_PASSWORD:?}@db:5432/${DB_NAME:-gct}
     AUTH_DATABASE_URL: postgres://gct_auth:${GCT_AUTH_PASSWORD:?}@db:5432/${DB_NAME:-gct}

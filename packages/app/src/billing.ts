@@ -227,7 +227,7 @@ export async function grantCourtesy(platform: Db, tenantId: string, reason: stri
  * então ninguém ganha cortesia se cadastrando depois com um nome parecido.
  */
 export const OWNER_COURTESY: { namePattern: string; createdBefore: string }[] = [
-  { namePattern: '%techflash%', createdBefore: '2026-11-03T00:00:00Z' },
+  { namePattern: '%tech%flash%', createdBefore: '2026-11-03T00:00:00Z' },
 ];
 
 export async function applyOwnerCourtesy(platform: Db): Promise<number> {
