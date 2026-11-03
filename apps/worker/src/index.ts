@@ -35,7 +35,7 @@ async function periodicLoop() {
   while (!stopping) {
     try {
       const r = await runPeriodicJobs(deps);
-      if (r.reservations || r.subscriptionTransitions) log('info', 'rotinas', r);
+      if (r.reservations || r.subscriptionTransitions || r.courtesy) log('info', 'rotinas', r);
       if (Date.now() - lastSnapshot > 3600_000) {
         await snapshotDailyStock(deps);
         lastSnapshot = Date.now();

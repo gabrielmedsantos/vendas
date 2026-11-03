@@ -106,3 +106,4 @@ pnpm test && pnpm test:int
 - Entrada de estoque (reposição) pela lista e pela página do produto: `POST products/:id/stock-entry` (`stockEntry` em product-quick.ts, mesma regra do cadastro: compra paga/a pagar ou saldo inicial). Menu: Compras logo abaixo de Produtos.
 - Excluir venda: `POST sales/:id/delete` (reversals.execute) — ver ADR em DECISOES.md. Migrações 0014 e 0015 (aditivas).
 - Cortesia permanente para a empresa do dono: `sudo /srv/gct/infra/vps/cortesia.sh "Nome" --aplicar` (worker `dist/cortesia.js`, `grantCourtesy` em billing.ts; auditado em subscription_events).
+- Cortesia automática do dono: `OWNER_COURTESY` em billing.ts (nome ilike '%techflash%' e criada antes de 2026-11-03), aplicada pela rotina periódica do worker; auditada (actor system:owner-courtesy).

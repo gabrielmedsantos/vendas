@@ -6,7 +6,7 @@ import { generateDocument } from './documents';
 import { releaseReservations } from './inventory';
 import { buildReport, REPORT_KINDS, reportToCsv, resolvePeriod, type ReportKind } from './metrics';
 import { effectivePermissions, type Role } from '@gct/shared';
-import { runSubscriptionLifecycle } from './billing';
+import { applyOwnerCourtesy, runSubscriptionLifecycle } from './billing';
 
 export interface OutboxEvent {
   id: string;
@@ -218,8 +218,9 @@ export async function snapshotDailyStock(deps: AppDeps): Promise<number> {
 
 export async function runPeriodicJobs(deps: AppDeps) {
   const reservations = await expireReservations(deps);
+  const courtesy = await applyOwnerCourtesy(deps.dbs.platform);
   const subs = await runSubscriptionLifecycle(deps.dbs.platform);
-  return { reservations, subscriptionTransitions: subs.transitions };
+  return { reservations, subscriptionTransitions: subs.transitions, courtesy };
 }
 
 export async function queueHealth(deps: AppDeps) {

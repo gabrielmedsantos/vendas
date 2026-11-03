@@ -2,7 +2,7 @@ import { createHmac, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  applyBillingEvent, createProduct, grantCourtesy, runSubscriptionLifecycle, getReferralInfo, platformReferrals, platformSetReferralStatus, provisionTenant, platformCreateInvoice, platformMarkInvoicePaid, platformOverview, platformSetTenantStatus, processWebhookEvents,
+  applyBillingEvent, applyOwnerCourtesy, createProduct, grantCourtesy, runSubscriptionLifecycle, getReferralInfo, platformReferrals, platformSetReferralStatus, provisionTenant, platformCreateInvoice, platformMarkInvoicePaid, platformOverview, platformSetTenantStatus, processWebhookEvents,
   receiveBillingWebhook, resolveActor, resolvePlatformAdmin, verifyWebhookSignature, zProduct, type PlatformAdmin,
 } from '@gct/app';
 import { closeDeps, createTenant, createUser, testDeps, type TenantFixture } from './helpers';
@@ -155,5 +155,23 @@ describe('indicações na plataforma', () => {
     expect(events.at(-1)).toMatchObject({ to_status: 'active', actor: 'cli:cortesia', reason: 'Cortesia: empresa do dono da plataforma' });
     // Repetir não quebra (já ativa).
     await expect(grantCourtesy(deps.dbs.platform, E.tenantId, 'de novo', 'cli:cortesia')).resolves.toMatchObject({ changed: true });
+  });
+
+  it('cortesia automática do dono: libera empresa TechFlash antiga suspensa; nova com o mesmo nome não ganha', async () => {
+    const antiga = await createTenant(deps, `TechFlash Fortal ${randomUUID().slice(0, 4)}`);
+    const nova = await createTenant(deps, `TechFlash Copia ${randomUUID().slice(0, 4)}`);
+    // Simula a empresa antiga (criada em setembro) e suspensa por teste vencido.
+    await deps.dbs.platform.updateTable('tenants').set({ created_at: new Date('2026-09-29T12:00:00Z') }).where('id', '=', antiga.tenantId).execute();
+    for (const t of [antiga, nova]) {
+      await deps.dbs.platform.updateTable('subscriptions').set({ status: 'suspended' }).where('tenant_id', '=', t.tenantId).execute();
+      await deps.dbs.platform.updateTable('tenants').set({ status: 'suspended' }).where('id', '=', t.tenantId).execute();
+    }
+    expect(await applyOwnerCourtesy(deps.dbs.platform)).toBeGreaterThanOrEqual(1);
+    expect((await sub(antiga.tenantId)).status).toBe('active');
+    expect((await sub(nova.tenantId)).status).toBe('suspended');
+    // Já em cortesia: rodar de novo não faz nada com ela.
+    const before = (await deps.dbs.platform.selectFrom('subscription_events').select('id').where('tenant_id', '=', antiga.tenantId).execute()).length;
+    await applyOwnerCourtesy(deps.dbs.platform);
+    expect((await deps.dbs.platform.selectFrom('subscription_events').select('id').where('tenant_id', '=', antiga.tenantId).execute()).length).toBe(before);
   });
 });

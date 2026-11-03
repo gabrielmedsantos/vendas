@@ -220,3 +220,32 @@ export async function grantCourtesy(platform: Db, tenantId: string, reason: stri
   }
   return { changed: true };
 }
+
+/**
+ * Empresas do dono da plataforma: cortesia permanente aplicada pela rotina periódica,
+ * sem depender de acesso manual à VPS. Só vale para empresas criadas ANTES da data de corte,
+ * então ninguém ganha cortesia se cadastrando depois com um nome parecido.
+ */
+export const OWNER_COURTESY: { namePattern: string; createdBefore: string }[] = [
+  { namePattern: '%techflash%', createdBefore: '2026-11-03T00:00:00Z' },
+];
+
+export async function applyOwnerCourtesy(platform: Db): Promise<number> {
+  let n = 0;
+  for (const rule of OWNER_COURTESY) {
+    const rows = await platform
+      .selectFrom('tenants as t')
+      .innerJoin('subscriptions as s', 's.tenant_id', 't.id')
+      .select(['t.id'])
+      .where('t.name', 'ilike', rule.namePattern)
+      .where('t.created_at', '<', new Date(rule.createdBefore))
+      // Já em cortesia (ativa e sem vencimento próximo): nada a fazer.
+      .where((eb) => eb.or([eb('s.status', '!=', 'active'), eb('t.status', '!=', 'active'), eb('s.current_period_end', '<', new Date('2099-01-01T00:00:00Z'))]))
+      .execute();
+    for (const r of rows) {
+      await grantCourtesy(platform, r.id, 'empresa do dono da plataforma', 'system:owner-courtesy');
+      n++;
+    }
+  }
+  return n;
+}
